@@ -188,7 +188,7 @@ impl<'a> Session<'a> {
                     return Ok(());
                 }
                 let translator = PrismaTranslator {
-                    disk_mapping: &self.databases[db_index].disk_mappings[mapping_index],
+                    path: &self.databases[db_index].disk_mappings[mapping_index].path,
                 };
                 translator.load();
                 Ok(())

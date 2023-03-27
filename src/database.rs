@@ -25,14 +25,14 @@ impl Database<'_> {
             match mapping.format {
                 AcceptedFormat::Json => {
                     let translator = JsonTranslator {
-                        disk_mapping: &mapping,
+                        path: &mapping.path,
                     };
                     translator.to_disk(&descriptions)
                 }
                 AcceptedFormat::Prisma => {
                     println!("Prisma sync not implemented");
                     let translator = PrismaTranslator {
-                        disk_mapping: &mapping,
+                        path: &mapping.path,
                     };
                     translator.to_disk(&descriptions)
                 }
@@ -147,16 +147,16 @@ impl Database<'_> {
         match format {
             AcceptedFormat::Json => {
                 let translator = JsonTranslator {
-                    disk_mapping: &self.disk_mappings[disk_mapping_index],
+                    path: &self.disk_mappings[disk_mapping_index].path,
                 };
-                let data = translator.from_disk();
+                let data = translator.from_disk().unwrap();
                 Some(data)
             }
             AcceptedFormat::Prisma => {
                 let translator = PrismaTranslator {
-                    disk_mapping: &self.disk_mappings[disk_mapping_index],
+                    path: &self.disk_mappings[disk_mapping_index].path,
                 };
-                let data = translator.from_disk();
+                let data = translator.from_disk().unwrap();
                 Some(data)
             }
         }
