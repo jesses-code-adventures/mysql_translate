@@ -1,27 +1,42 @@
-use crate::json_translator;
+use crate::json_translator::JsonTranslator;
+use crate::prisma_translator::PrismaTranslator;
 use crate::sql;
+use crate::structure::{AcceptedFormat, DiskMapping, TranslatorBehaviour};
 use dialoguer::Select;
+use serde::Serialize;
 use serde_json::json;
+use std::borrow::Cow;
+use std::path::{Path, PathBuf};
+
 /// One database url can be linked up to multiple schema locations.
 /// The "name" does not need to match the db name.
-pub struct Database {
+#[derive(Serialize, Clone)]
+pub struct Database<'a> {
     pub name: String,
     pub db_url: String,
-    pub json_path: Option<String>,
-    pub prisma_path: Option<String>,
+    pub disk_mappings: Vec<DiskMapping<'a>>,
 }
 
-impl Database {
+impl Database<'_> {
     /// Pull the database info from the db and propagate it.
     pub fn sync(&self) {
         let descriptions = self.get_descriptions();
-        match &self.json_path {
-            Some(path) => json_translator::write(&descriptions, &path),
-            None => println!("No json path found."),
-        }
-        match &self.prisma_path {
-            Some(path) => println!("prisma path: {}", path),
-            None => println!("No prisma json path found."),
+        for mapping in self.disk_mappings.iter() {
+            match mapping.format {
+                AcceptedFormat::Json => {
+                    let translator = JsonTranslator {
+                        disk_mapping: &mapping,
+                    };
+                    translator.to_disk(&descriptions)
+                }
+                AcceptedFormat::Prisma => {
+                    println!("Prisma sync not implemented");
+                    let translator = PrismaTranslator {
+                        disk_mapping: &mapping,
+                    };
+                    translator.to_disk(&descriptions)
+                }
+            }
         }
     }
     /// Update the name associated with your database.
@@ -33,25 +48,78 @@ impl Database {
     pub fn update_db_url(&mut self, new_db_url: String) {
         self.db_url = new_db_url;
     }
-    /// Update the path to push json files to.
-    pub fn update_json_path(&mut self, new_json_path: String) {
-        self.json_path = Some(new_json_path);
+    fn select_format(&self) -> AcceptedFormat {
+        let mut formats = AcceptedFormat::all_as_array();
+        let mut options = vec![];
+        for fmt in formats.iter_mut() {
+            options.push(fmt.as_string());
+        }
+        options.push("exit");
+        let selection = Select::new().items(&options).default(0).interact().unwrap();
+        match options[selection] {
+            "json" => return AcceptedFormat::Json,
+            "prisma" => return AcceptedFormat::Prisma,
+            "exit" => {
+                println!("defaulting to json...");
+                return AcceptedFormat::Json;
+            }
+            _ => {
+                println!("defaulting to json...");
+                return AcceptedFormat::Json;
+            }
+        }
     }
-    /// Update the path to push prisma schemas to.
-    pub fn update_prisma_path(&mut self, new_prisma_path: String) {
-        self.prisma_path = Some(new_prisma_path);
+
+    pub fn create_disk_mapping(&mut self, format: AcceptedFormat, path: &Path) {
+        let path_buf = PathBuf::from(path);
+        let write_path = Cow::Owned(path_buf);
+        let mapping = DiskMapping {
+            format,
+            path: write_path,
+        };
+        self.disk_mappings.push(mapping)
+    }
+
+    pub fn update_disk_mapping(&mut self, format: AcceptedFormat, path: &Path) {
+        if self.disk_mappings.len() == 0 {
+            println!("no saved disk mappings, creating a new one...");
+            self.create_disk_mapping(format, path);
+            return;
+        }
+        let mut mapping_update_index = 0;
+        let mut found = false;
+        for (i, disk_mapping) in self.disk_mappings.iter().enumerate() {
+            println!("disk mapping: {:?}", disk_mapping);
+            if disk_mapping.format == format {
+                mapping_update_index = i;
+                found = true;
+            }
+        }
+        if !found {
+            println!("no mapping found, creating a new one");
+            self.create_disk_mapping(format, path);
+            return;
+        }
+        println!(
+            "selected {:?}, please enter the full path",
+            self.disk_mappings[mapping_update_index].format
+        );
+        let mut input = String::new();
+        std::io::stdin()
+            .read_line(&mut input)
+            .expect("failed to read the input.");
+        let new_path_buf: PathBuf = PathBuf::from(input.trim().to_string());
+        self.disk_mappings[mapping_update_index].path = Cow::Owned(new_path_buf);
     }
     /// Print a representation of the database
     pub fn display(&self) {
         println!("name: {}", self.name);
         println!("db_url: {}", self.db_url);
-        match &self.json_path {
-            Some(path) => println!("json_path: {}", path),
-            None => println!("No json path found."),
-        }
-        match &self.prisma_path {
-            Some(path) => println!("prisma_path: {}", path),
-            None => println!("No prisma path found."),
+        for mapping in self.disk_mappings.iter() {
+            match mapping.format {
+                AcceptedFormat::Json => println!("json_path: {}", mapping.path.display()),
+                AcceptedFormat::Prisma => println!("prisma_path: {}", mapping.path.display()),
+            }
         }
     }
     /// Get a json value of the database.
@@ -59,18 +127,50 @@ impl Database {
         json!({
             "name": self.name,
             "db_url": self.db_url,
-            "json_path": self.json_path,
-            "prisma_path": self.prisma_path,
+            "disk_mappings": self.disk_mappings
         })
     }
+    /// View a schema from the passed type's path
+    pub fn view_schema(&self, format: AcceptedFormat) -> Option<serde_json::Value> {
+        let mut found = false;
+        let mut disk_mapping_index = 0;
+        for (i, mapping) in self.disk_mappings.iter().enumerate() {
+            if mapping.format == format {
+                disk_mapping_index = i;
+                found = true;
+            }
+        }
+        if !found {
+            println!("no schema found");
+            return None;
+        }
+        match format {
+            AcceptedFormat::Json => {
+                let translator = JsonTranslator {
+                    disk_mapping: &self.disk_mappings[disk_mapping_index],
+                };
+                let data = translator.from_disk();
+                Some(data)
+            }
+            AcceptedFormat::Prisma => {
+                let translator = PrismaTranslator {
+                    disk_mapping: &self.disk_mappings[disk_mapping_index],
+                };
+                let data = translator.from_disk();
+                Some(data)
+            }
+        }
+    }
+    /// User interactivity for editing a database
+    /// Returns true if the user wants to edit another database.
     pub fn edit(&mut self) -> bool {
-        let options = vec!["name", "db_url", "json_path", "prisma_path", "done"];
+        let options = vec!["name", "db_url", "disk_mappings", "done"];
         let mut selection = Select::new().items(&options).default(0).interact().unwrap();
         let mut edit_another = false;
         while options[selection] != "done" {
             match options[selection] {
                 "name" => {
-                    println!("pls enter the new name:");
+                    println!("pls enter the new name");
                     let mut input = String::new();
                     std::io::stdin()
                         .read_line(&mut input)
@@ -78,37 +178,59 @@ impl Database {
                     self.update_name(input.trim().to_string());
                 }
                 "db_url" => {
-                    println!("pls enter the new db url:");
+                    println!("pls enter the new db url");
                     let mut input = String::new();
                     std::io::stdin()
                         .read_line(&mut input)
                         .expect("failed to read line");
                     self.update_db_url(input.trim().to_string());
                 }
-                "json_path" => {
-                    println!("pls enter the new json path:");
-                    let mut input = String::new();
-                    std::io::stdin()
-                        .read_line(&mut input)
-                        .expect("failed to read line");
-                    self.update_json_path(input.trim().to_string());
-                }
-                "prisma_path" => {
-                    println!("pls enter the new prisma path:");
-                    let mut input = String::new();
-                    std::io::stdin()
-                        .read_line(&mut input)
-                        .expect("failed to read line");
-                    self.update_prisma_path(input.trim().to_string());
+                "disk_mappings" => {
+                    self.edit_disk_mappings();
                 }
                 "edit_another" => {
                     edit_another = true;
                     break;
                 }
-                "done" => {}
+                "done" => {
+                    edit_another = false;
+                }
                 _ => println!("invalid selection"),
             }
             selection = Select::new().items(&options).default(0).interact().unwrap();
+        }
+        edit_another
+    }
+
+    fn edit_disk_mappings(&mut self) -> bool {
+        let options = vec!["prisma", "json", "exit"];
+        let selection = Select::new().items(&options).default(0).interact().unwrap();
+        let mut edit_another = false;
+        match options[selection] {
+            "prisma" => {
+                println!("pls enter the full path to the prisma schema");
+                let mut input = String::new();
+                std::io::stdin()
+                    .read_line(&mut input)
+                    .expect("failed to read input");
+                let path = Path::new(&input);
+                self.update_disk_mapping(AcceptedFormat::Prisma, path);
+                edit_another = false;
+            }
+            "json" => {
+                println!("pls enter the full path to the json schema");
+                let mut input = String::new();
+                std::io::stdin()
+                    .read_line(&mut input)
+                    .expect("failed to read input");
+                let path = Path::new(&input);
+                self.update_disk_mapping(AcceptedFormat::Json, path);
+                edit_another = false;
+            }
+            "exit" => {
+                edit_another = false;
+            }
+            _ => println!("invalid selection"),
         }
         edit_another
     }
