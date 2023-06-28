@@ -1,4 +1,5 @@
 use crate::database;
+use crate::json_translator::JsonTranslator;
 use crate::prisma_translator::PrismaTranslator;
 use crate::structure::{AcceptedFormat, DiskMapping};
 use dialoguer::Select;
@@ -21,6 +22,7 @@ impl<'a> Session<'a> {
             .unwrap_or_else(|_| println!("failed to load session"));
         return s;
     }
+
     pub fn load(&mut self) -> Result<(), std::io::Error> {
         let path = Path::new(self._data_location.as_str());
         let file = File::open(&path).unwrap_or_else(|_| File::create(&path).unwrap());
@@ -40,6 +42,7 @@ impl<'a> Session<'a> {
         }
         Ok(())
     }
+
     pub fn add_database(&mut self, database: database::Database<'a>) {
         if database.db_url.len() == 0 {
             println!("Database url is empty. Skipping.");
@@ -55,17 +58,20 @@ impl<'a> Session<'a> {
         self.save()
             .unwrap_or_else(|_| println!("database failed to save"));
     }
+
     pub fn display(&mut self) {
         self.sort();
         for database in &self.databases {
             database.display();
         }
     }
+
     pub fn sync(&self) {
         for database in &self.databases {
             database.sync();
         }
     }
+
     pub fn create_database_entry(&mut self) -> Result<(), std::io::Error> {
         println!("pls enter the database url:");
         let mut input = String::new();
@@ -82,6 +88,7 @@ impl<'a> Session<'a> {
             .unwrap_or_else(|_| println!("new database failed to save"));
         Ok(())
     }
+
     fn find_existing_database_index(&self, db_url: &str) -> Option<usize> {
         let mut index = 0;
         for database in &self.databases {
@@ -92,14 +99,17 @@ impl<'a> Session<'a> {
         }
         None
     }
+
     fn remove_database(&mut self, index: usize) {
         self.databases.remove(index);
         self.save()
             .unwrap_or_else(|_| println!("saving failed on removal"));
     }
+
     pub fn sort(&mut self) {
         self.databases.sort_by(|a, b| a.name.cmp(&b.name));
     }
+
     pub fn save(&self) -> Result<(), serde_json::Error> {
         let path = Path::new(self._data_location.as_str());
         let file = File::create(&path).unwrap();
@@ -112,6 +122,7 @@ impl<'a> Session<'a> {
         serde_json::to_writer_pretty(buf_writer, &the_json)?;
         Ok(())
     }
+
     /// Returns the index of the selected database in self.databases
     pub fn select_database(&self) -> Result<usize, std::io::Error> {
         let selection = Select::new()
@@ -127,6 +138,7 @@ impl<'a> Session<'a> {
             .interact()?;
         Ok(selection)
     }
+
     pub fn edit_databases(&mut self) -> Result<(), std::io::Error> {
         let mut edit_another = true;
         while edit_another {
@@ -135,6 +147,7 @@ impl<'a> Session<'a> {
         }
         Ok(())
     }
+
     pub fn select_schema_to_write(&mut self) -> Result<(), std::io::Error> {
         let _database = self.select_database();
         let options = vec!["json", "prisma", "exit"];
@@ -153,24 +166,26 @@ impl<'a> Session<'a> {
 
     pub fn select_schema_to_view(&self) -> Result<(), std::io::Error> {
         let db_index = self.select_database()?;
-        let options = vec!["json", "prisma", "exit"];
+        let options = AcceptedFormat::all_as_string_array();
         let selection = Select::new()
             .with_prompt("which schema would you like to see?")
             .default(0)
             .items(&options)
             .interact()?;
 
-        match options[selection] {
+        match options[selection].as_str() {
             "json" => {
+                let translator = JsonTranslator {
+                    path: &self.databases[db_index].disk_mappings[selection].path,
+                };
+                translator.path.display();
                 let schema = self.databases[db_index].view_schema(AcceptedFormat::Json);
                 match schema {
                     Some(x) => {
                         println!("{:?}", serde_json::to_writer_pretty(std::io::stdout(), &x));
-                        Ok(())
                     }
                     None => {
                         println!("no schema found");
-                        Ok(())
                     }
                 }
             }
@@ -191,10 +206,10 @@ impl<'a> Session<'a> {
                     path: &self.databases[db_index].disk_mappings[mapping_index].path,
                 };
                 translator.load();
-                Ok(())
             }
-            _ => Ok(()),
-        }
+            _ => {}
+        };
+        Ok(())
     }
     pub fn main_menu(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let selection = Select::new()

@@ -65,7 +65,7 @@ impl std::fmt::Display for ErrorReport {
 }
 
 pub fn get_table_descriptions(url: &str) -> Result<Vec<Table>> {
-    let pool = Pool::new(url).unwrap();
+    let pool = Pool::new(url)?;
     let mut conn = pool.get_conn().unwrap();
     let mut errors: Vec<ErrorReport> = vec![];
     let tables: Vec<String> = conn.query("SHOW TABLES").unwrap_or_else(|e| {
@@ -75,9 +75,6 @@ pub fn get_table_descriptions(url: &str) -> Result<Vec<Table>> {
         });
         vec![]
     });
-    // if errors.len() > 0 {
-    //     return Err(errors[0].error);
-    // }
     let mut all_descriptions: Vec<Table> = vec![];
     for table in tables {
         let descriptions: Vec<Row> =

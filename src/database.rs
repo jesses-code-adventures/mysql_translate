@@ -236,6 +236,7 @@ impl Database<'_> {
     }
 
     fn get_descriptions(&self) -> Vec<sql::Table> {
+        println!("{:?}", &self.db_url);
         sql::get_table_descriptions(&self.db_url).expect("Failed to get table descriptions")
     }
 }

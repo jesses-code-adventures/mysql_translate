@@ -16,6 +16,8 @@ pub trait TranslatorBehaviour<T> {
     fn from_database(&self, descriptions: &Vec<Table>) -> T;
     /// Reads the database description from disk in the desired format.
     fn from_disk(&self) -> Result<T, std::io::Error>;
+    /// Prints the representation as a string
+    fn display(&self, value: T);
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
@@ -75,6 +77,12 @@ impl AcceptedFormat {
     }
     pub fn all_as_array() -> Vec<AcceptedFormat> {
         vec![AcceptedFormat::Json, AcceptedFormat::Prisma]
+    }
+    pub fn all_as_string_array() -> Vec<String> {
+        vec![
+            AcceptedFormat::Json.to_string(),
+            AcceptedFormat::Prisma.to_string(),
+        ]
     }
 }
 

@@ -11,6 +11,24 @@ pub struct PrismaTranslator<'a> {
     pub path: &'a Path,
 }
 
+impl<'a> TranslatorBehaviour<serde_json::Value> for PrismaTranslator<'a> {
+    fn from_database(&self, _database: &Vec<Table>) -> serde_json::Value {
+        todo!();
+    }
+    fn from_disk(&self) -> Result<serde_json::Value, std::io::Error> {
+        println!("no prisma load configured");
+        todo!("{:?}", self.load())
+    }
+    fn to_disk(&self, _database: &Vec<Table>) {
+        println!("no prisma output configured");
+        // todo!();
+    }
+    fn display(&self, _value: serde_json::Value) {
+        println!("no prisma display configured");
+        // todo!();
+    }
+}
+
 impl PrismaTranslator<'_> {
     pub fn load(&self) {
         let file = File::open(self.path).unwrap();
@@ -62,19 +80,12 @@ impl PrismaTranslator<'_> {
             "Datasource stuff:\n\n---------------\n{:?}",
             data_source_str
         );
-        println!("Models stuff:\n\n---------------\n{:?}", models_str);
-    }
-}
-
-impl<'a> TranslatorBehaviour<serde_json::Value> for PrismaTranslator<'a> {
-    fn from_database(&self, _database: &Vec<Table>) -> serde_json::Value {
-        todo!();
-    }
-    fn from_disk(&self) -> Result<serde_json::Value, std::io::Error> {
-        todo!("{:?}", self.load())
-    }
-    fn to_disk(&self, _database: &Vec<Table>) {
-        todo!();
+        // let datasource = Datasource::from_string(&data_source_str);
+        // println!("Before {:?}", &data_source_str);
+        // println!("After {:?}", datasource.as_text());
+        // assert!(&data_source_str == &datasource.as_text());
+        // println!("{:?}", datasource.as_text());
+        // println!("Models stuff:\n\n---------------\n{:?}", models_str);
     }
 }
 

@@ -47,6 +47,10 @@ impl<'a> TranslatorBehaviour<serde_json::Value> for JsonTranslator<'a> {
             Err(e) => println!("error writing json: {}", e),
         }
     }
+
+    fn display(&self, value: serde_json::Value) {
+        todo!();
+    }
 }
 
 /// Private implementation behaviours for JsonTranslator
