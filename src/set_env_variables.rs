@@ -1,5 +1,5 @@
-use dotenv::dotenv;
+use dotenvy::dotenv;
 
 pub fn set_vars() {
-    dotenv().ok();
+    dotenv().expect(".env not found");
 }
