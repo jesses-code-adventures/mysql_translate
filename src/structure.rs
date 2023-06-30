@@ -80,8 +80,8 @@ impl AcceptedFormat {
     }
     pub fn all_as_string_array() -> Vec<String> {
         vec![
-            AcceptedFormat::Json.to_string(),
-            AcceptedFormat::Prisma.to_string(),
+            AcceptedFormat::Json.to_string().replace('"', ""),
+            AcceptedFormat::Prisma.to_string().replace('"', ""),
         ]
     }
 }
