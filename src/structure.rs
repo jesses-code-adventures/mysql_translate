@@ -1,4 +1,5 @@
 use crate::sql::Table;
+use anyhow::Result;
 use core::fmt::{self, Display};
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -15,9 +16,9 @@ pub trait TranslatorBehaviour<T> {
     /// be the shared intemediary format between formats, so to speak.
     fn from_database(&self, descriptions: &Vec<Table>) -> T;
     /// Reads the database description from disk in the desired format.
-    fn from_disk(&self) -> Result<T, std::io::Error>;
+    fn from_disk(&mut self) -> Result<T>;
     /// Prints the representation as a string
-    fn display(&self, value: T);
+    fn display(&self);
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]

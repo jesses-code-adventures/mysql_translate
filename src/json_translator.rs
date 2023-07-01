@@ -1,5 +1,6 @@
 use crate::sql::{Description, Table};
 use crate::structure::TranslatorBehaviour;
+use anyhow::Result;
 use serde_json::json;
 use std::collections::HashMap;
 use std::fs::File;
@@ -10,6 +11,7 @@ use std::path::Path;
 pub struct JsonTranslator<'a> {
     // pub disk_mapping: &'a DiskMapping<'a>,
     pub path: &'a Path,
+    pub json: Option<serde_json::Value>,
 }
 
 /// Public implementation for JsonTranslator
@@ -29,13 +31,14 @@ impl<'a> TranslatorBehaviour<serde_json::Value> for JsonTranslator<'a> {
     }
 
     /// Load json from a path.
-    fn from_disk(&self) -> Result<serde_json::Value, std::io::Error> {
+    fn from_disk(&mut self) -> Result<serde_json::Value> {
         let file = File::open(&self.path)?;
         let val = serde_json::from_reader(file).unwrap_or_else(|_| {
             println!("couldn't read the file! loading an empty one...");
             json!({})
         });
-        Ok(val)
+        self.json = Some(val);
+        Ok(self.json.clone().unwrap())
     }
 
     /// Converts a vector of sql::Table to a json object and dumps to disk.
@@ -48,7 +51,7 @@ impl<'a> TranslatorBehaviour<serde_json::Value> for JsonTranslator<'a> {
         }
     }
 
-    fn display(&self, value: serde_json::Value) {
+    fn display(&self) {
         todo!();
     }
 }

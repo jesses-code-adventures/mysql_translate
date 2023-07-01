@@ -26,6 +26,7 @@ impl Database<'_> {
                 AcceptedFormat::Json => {
                     let translator = JsonTranslator {
                         path: &mapping.path,
+                        json: None,
                     };
                     translator.to_disk(&descriptions)
                 }
@@ -33,6 +34,7 @@ impl Database<'_> {
                     println!("Prisma sync not implemented");
                     let translator = PrismaTranslator {
                         path: &mapping.path,
+                        prisma_schema: None,
                     };
                     translator.to_disk(&descriptions)
                 }
@@ -111,8 +113,10 @@ impl Database<'_> {
         let new_path_buf: PathBuf = PathBuf::from(input.trim().to_string());
         self.disk_mappings[mapping_update_index].path = Cow::Owned(new_path_buf);
     }
+
     /// Print a representation of the database
     pub fn display(&self) {
+        print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
         println!("name: {}", self.name);
         println!("db_url: {}", self.db_url);
         for mapping in self.disk_mappings.iter() {
@@ -122,6 +126,7 @@ impl Database<'_> {
             }
         }
     }
+
     /// Get a json value of the database.
     pub fn to_json(&self) -> serde_json::Value {
         json!({
@@ -130,37 +135,7 @@ impl Database<'_> {
             "disk_mappings": self.disk_mappings
         })
     }
-    /// View a schema from the passed type's path
-    pub fn view_schema(&self, format: AcceptedFormat) -> Option<serde_json::Value> {
-        let mut found = false;
-        let mut disk_mapping_index = 0;
-        for (i, mapping) in self.disk_mappings.iter().enumerate() {
-            if mapping.format == format {
-                disk_mapping_index = i;
-                found = true;
-            }
-        }
-        if !found {
-            println!("no schema found");
-            return None;
-        }
-        match format {
-            AcceptedFormat::Json => {
-                let translator = JsonTranslator {
-                    path: &self.disk_mappings[disk_mapping_index].path,
-                };
-                let data = translator.from_disk().unwrap();
-                Some(data)
-            }
-            AcceptedFormat::Prisma => {
-                let translator = PrismaTranslator {
-                    path: &self.disk_mappings[disk_mapping_index].path,
-                };
-                let data = translator.from_disk().unwrap();
-                Some(data)
-            }
-        }
-    }
+
     /// User interactivity for editing a database
     /// Returns true if the user wants to edit another database.
     pub fn edit(&mut self) -> bool {
@@ -203,7 +178,13 @@ impl Database<'_> {
     }
 
     fn edit_disk_mappings(&mut self) -> bool {
-        let options = vec!["prisma", "json", "exit"];
+        let string_options = AcceptedFormat::all_as_string_array();
+        let mut options: Vec<&str> = vec![];
+        for option in &string_options {
+            options.push(option.as_str());
+        }
+        options.push("exit");
+
         let selection = Select::new().items(&options).default(0).interact().unwrap();
         let mut edit_another = false;
         match options[selection] {
@@ -230,7 +211,7 @@ impl Database<'_> {
             "exit" => {
                 edit_another = false;
             }
-            _ => println!("invalid selection"),
+            _ => println!("invalid selection or selection not yet implemented"),
         }
         edit_another
     }

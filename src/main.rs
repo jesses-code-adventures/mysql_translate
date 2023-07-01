@@ -13,6 +13,7 @@ fn welcome() {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Sets the environment variables using .env in the root directory.
+    print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
     welcome();
     set_env_variables::set_vars();
     let mut session = session::Session {

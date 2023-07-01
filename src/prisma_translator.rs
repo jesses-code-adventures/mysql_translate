@@ -1,36 +1,42 @@
+use crate::sql::Table;
+use crate::structure::TranslatorBehaviour;
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
-
-use crate::sql::Table;
-use crate::structure::TranslatorBehaviour;
-
 pub struct PrismaTranslator<'a> {
     pub path: &'a Path,
+    pub prisma_schema: Option<PrismaSchema>,
 }
 
-impl<'a> TranslatorBehaviour<serde_json::Value> for PrismaTranslator<'a> {
-    fn from_database(&self, _database: &Vec<Table>) -> serde_json::Value {
+impl<'a> TranslatorBehaviour<PrismaSchema> for PrismaTranslator<'a> {
+    fn from_database(&self, _database: &Vec<Table>) -> PrismaSchema {
         todo!();
     }
-    fn from_disk(&self) -> Result<serde_json::Value, std::io::Error> {
-        println!("no prisma load configured");
-        todo!("{:?}", self.load())
+
+    fn from_disk(&mut self) -> Result<PrismaSchema> {
+        if self.prisma_schema.is_none() {
+            self.prisma_schema = Some(self.parse_from_disk());
+        }
+        Ok(self.prisma_schema.clone().unwrap())
     }
+
     fn to_disk(&self, _database: &Vec<Table>) {
         println!("no prisma output configured");
-        // todo!();
     }
-    fn display(&self, _value: serde_json::Value) {
-        println!("no prisma display configured");
-        // todo!();
+
+    fn display(&self) {
+        if self.prisma_schema.is_none() {
+            return;
+        }
+        println!("{}", self.prisma_schema.as_ref().unwrap().as_text());
     }
 }
 
 impl PrismaTranslator<'_> {
-    pub fn load(&self) {
+    pub fn parse_from_disk(&self) -> PrismaSchema {
         let file = File::open(self.path).unwrap();
         let mut generator_str = String::new();
         let mut data_source_str = String::new();
@@ -70,25 +76,22 @@ impl PrismaTranslator<'_> {
                 }
             }
         }
-        println!("Generator stuff:\n\n---------------\n");
-        let generator = Generator::from_string(&generator_str);
-        println!("Before {:?}", &generator_str);
-        println!("After {:?}", generator.as_text());
-        assert!(&generator_str == &generator.as_text());
-        println!("{:?}", generator.as_text());
-        println!(
-            "Datasource stuff:\n\n---------------\n{:?}",
-            data_source_str
-        );
-        // let datasource = Datasource::from_string(&data_source_str);
-        // println!("Before {:?}", &data_source_str);
-        // println!("After {:?}", datasource.as_text());
-        // assert!(&data_source_str == &datasource.as_text());
-        // println!("{:?}", datasource.as_text());
-        // println!("Models stuff:\n\n---------------\n{:?}", models_str);
+        let generator = Generator::parse_from_disk(&generator_str);
+        let datasource = Datasource::parse_from_disk(&data_source_str);
+        let mut models: Vec<Model> = vec![];
+        let models_strs: Vec<&str> = models_str.split("model ").collect();
+        for curr_model_str in models_strs {
+            let model = Model::parse_from_disk(curr_model_str);
+            if model.is_none() {
+                continue;
+            }
+            models.push(model.unwrap());
+        }
+        PrismaSchema::build(generator, datasource, models)
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PrismaSchema {
     generator: Generator,
     datasource: Datasource,
@@ -103,18 +106,32 @@ impl PrismaSchema {
             models: vec![],
         }
     }
+
+    fn build(generator: Generator, datasource: Datasource, models: Vec<Model>) -> PrismaSchema {
+        PrismaSchema {
+            generator,
+            datasource,
+            models,
+        }
+    }
+
     pub fn add_model(&mut self, model: Model) {
         self.models.push(model);
     }
+
     pub fn as_text(&self) -> String {
         let mut text = String::new();
         text.push_str(&self.generator.as_text());
+        text.push_str("\n\n");
         text.push_str(&self.datasource.as_text());
+        text.push_str("\n\n");
         for model in &self.models {
             text.push_str(&model.as_text());
+            text.push_str("\n");
         }
         text
     }
+
     pub fn load(&self, full_path: &String) -> String {
         let file = File::open(full_path).unwrap();
         let mut contents = String::new();
@@ -122,17 +139,17 @@ impl PrismaSchema {
             contents.push_str(&line.unwrap());
             contents.push_str("\n");
         }
-        println!("{:?}", contents);
         contents
     }
-    pub fn write(&self, full_path: &String) -> Result<(), std::io::Error> {
+
+    pub fn write(&self, full_path: &String) -> Result<()> {
         let contents = self.as_text();
         fs::write(full_path, contents)?;
         Ok(())
     }
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Generator {
     name: String,
     provider: String,
@@ -145,14 +162,13 @@ impl Generator {
             provider: String::from("prisma-client-js"),
         }
     }
-    fn from_string(generator_str: &String) -> Generator {
+    fn parse_from_disk(generator_str: &String) -> Generator {
         let pieces: Vec<&str> = generator_str.split(" = ").collect();
         let provider_piece = pieces[1];
         let provider_pieces: Vec<&str> = provider_piece.split(" ").collect();
         let binding = String::from(provider_pieces[0].replace('"', "").replace("\n", ""));
         let provider_dirty: Vec<&str> = binding.split("}").collect();
         let provider = String::from(provider_dirty[0]);
-        println!("{:?}", provider);
         Generator {
             name: String::from("client"),
             provider,
@@ -166,13 +182,13 @@ impl Generator {
     }
     fn as_text(&self) -> String {
         format!(
-            "generator {0} {{\n  provider = \"{1}\"\n}}\n\n",
+            "generator {0} {{\n  provider = \"{1}\"\n}}",
             self.name, self.provider
         )
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 struct Datasource {
     name: String,
     provider: String,
@@ -192,14 +208,40 @@ impl Datasource {
         self.provider = provider;
     }
     fn as_text(&self) -> String {
-        "datasource {} {\n  provider = \"{}\"\n  url = env(\"DATABASE_URL\")".to_string()
+        format!(
+            "datasource {} {{\n  provider = \"{}\"\n  url      = env(\"DATABASE_URL\")\n}}",
+            self.name, self.provider
+        )
+    }
+    fn parse_from_disk(datasource_string: &String) -> Datasource {
+        let lines: Vec<&str> = datasource_string.split("\n").collect();
+        let mut name = String::new();
+        let mut provider = String::new();
+        for line in lines {
+            if line.contains("datasource") {
+                name.push_str(
+                    line.strip_prefix("datasource ")
+                        .unwrap()
+                        .strip_suffix(" {")
+                        .unwrap(),
+                )
+            }
+            if line.contains("provider") {
+                let pieces: Vec<&str> = line.split("=").collect();
+                provider = pieces[1].replace('"', "").replace(' ', "");
+            }
+        }
+        Datasource { name, provider }
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Model {
     name: String,
     fields: Vec<Field>,
+    directives: Vec<String>,
+    name_column_width: usize,
+    field_type_column_width: usize,
 }
 
 impl Model {
@@ -207,73 +249,310 @@ impl Model {
         Model {
             name: String::new(),
             fields: vec![],
+            directives: vec![],
+            name_column_width: 0,
+            field_type_column_width: 0,
         }
     }
-    fn set_name(&mut self, name: String) {
-        self.name = name;
-    }
-    fn add_field(&mut self, field: Field) {
-        self.fields.push(field);
-    }
+
     fn as_text(&self) -> String {
         let mut text = String::new();
         text.push_str(&format!("model {} {{\n", self.name));
         for field in &self.fields {
-            text.push_str(&format!("  {} {}\n", field.name, field.field_type));
+            text.push_str("  ");
+            text.push_str(field.as_text().as_str());
+            text.push_str("\n");
+        }
+        if self.directives.len() > 0 {
+            text.push_str("\n");
+            for directive in &self.directives {
+                text.push_str("\n");
+                text.push_str(directive.as_str());
+            }
+            text.push_str("\n");
         }
         text.push_str("}\n");
         text
     }
+
+    fn parse_from_disk(model_str: &str) -> Option<Model> {
+        let mut name = String::new();
+        let mut pieces: Vec<&str> = model_str.split("{").collect();
+        let mut directives: Vec<String> = vec![];
+        name.push_str(pieces.remove(0).replace(" ", "").as_str());
+        if name.len() == 0 {
+            return None;
+        }
+        assert!(pieces.len() == 1);
+        let field_strs = pieces.pop().expect("pieces to have a value").split("\n");
+        let mut fields: Vec<Field> = vec![];
+        let mut name_column_width = 0;
+        let mut field_type_column_width = 0;
+        for field_str in field_strs {
+            if field_str.len() == 0 {
+                continue;
+            }
+            if field_str.trim().starts_with("@@") {
+                directives.push(field_str.to_string());
+                continue;
+            }
+            let field = Field::parse_from_disk(field_str.trim());
+            if field.is_none() {
+                continue;
+            } else {
+                if field.as_ref().unwrap().name.len() + 1 > name_column_width {
+                    name_column_width = field.as_ref().unwrap().name.len() + 1;
+                }
+                if field.as_ref().unwrap().field_type.len() + 1 > field_type_column_width {
+                    field_type_column_width = field.as_ref().unwrap().field_type.len() + 1;
+                }
+                fields.push(field.unwrap());
+            }
+        }
+
+        for field in fields.iter_mut() {
+            field.set_target_name_length(name_column_width);
+            field.set_field_type_length(field_type_column_width);
+        }
+
+        Some(Model {
+            name,
+            fields,
+            directives,
+            name_column_width,
+            field_type_column_width,
+        })
+    }
+
+    fn set_name(&mut self, name: String) {
+        self.name = name;
+    }
+
+    fn add_field(&mut self, field: Field) {
+        self.fields.push(field);
+    }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
+struct Relation {
+    map: Option<String>,
+    fields: Option<Vec<String>>,
+    references: Option<Vec<String>>,
+    on_update: Option<String>,
+    on_delete: Option<String>,
+}
+
+impl Relation {
+    fn new(
+        map: Option<String>,
+        fields: Option<Vec<String>>,
+        references: Option<Vec<String>>,
+        on_update: Option<String>,
+        on_delete: Option<String>,
+    ) -> Relation {
+        let relation = Relation {
+            map,
+            fields,
+            references,
+            on_update,
+            on_delete,
+        };
+        if relation.map.is_none() || (relation.fields.is_none() && relation.references.is_none()) {
+            panic!("insufficient data found to construct relation");
+        }
+        relation
+    }
+    fn as_text(&self) -> String {
+        let mut resp = String::new();
+        resp.push_str("@relation(");
+        if self.fields.is_some() {
+            resp.push_str("fields: [");
+            resp.push_str(self.fields.clone().unwrap().join(", ").as_str());
+            resp.push_str("]");
+        }
+        if self.references.is_some() {
+            if self.fields.is_some() {
+                resp.push_str(", ");
+            }
+            resp.push_str("references: [");
+            resp.push_str(self.fields.clone().unwrap().join(", ").as_str());
+            resp.push_str("]");
+        }
+        if self.map.is_some() {
+            if self.references.is_some() {
+                resp.push_str(", ");
+            }
+            resp.push_str("map: \"");
+            resp.push_str(self.map.clone().unwrap().as_str());
+            resp.push_str("\"");
+        }
+        if self.on_delete.is_some() {
+            resp.push_str(", ");
+            resp.push_str("onDelete: ");
+            resp.push_str(self.on_delete.clone().unwrap().as_str());
+        }
+        if self.on_update.is_some() {
+            resp.push_str(", ");
+            resp.push_str("onUpdate: ");
+            resp.push_str(self.on_update.clone().unwrap().as_str());
+        }
+        resp.push_str(")");
+        resp
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
 struct Field {
     name: String,
+    target_name_width: usize,
     field_type: String,
+    target_field_type_width: usize,
+    db_type_annotation: Option<String>,
     is_required: bool,
-    is_list: bool,
+    is_array: bool,
     is_unique: bool,
     is_id: bool,
     is_read_only: bool,
-    is_generated: bool,
-    is_relation: bool,
-    relation_name: String,
-    relation_from: String,
-    relation_to: String,
-    relation_on_delete: String,
-    relation_on_update: String,
+    relation: Option<Relation>,
 }
 
 impl Field {
     fn new() -> Field {
         Field {
             name: String::new(),
+            target_name_width: 0,
             field_type: String::new(),
+            target_field_type_width: 0,
+            db_type_annotation: None,
             is_required: false,
-            is_list: false,
+            is_array: false,
             is_unique: false,
             is_id: false,
             is_read_only: false,
-            is_generated: false,
-            is_relation: false,
-            relation_name: String::new(),
-            relation_from: String::new(),
-            relation_to: String::new(),
-            relation_on_delete: String::new(),
-            relation_on_update: String::new(),
+            relation: None,
         }
+    }
+    fn parse_from_disk(field_str: &str) -> Option<Field> {
+        if field_str.starts_with("@@") || field_str.starts_with("@relation") {
+            panic!("uncaught directive {}", field_str);
+        }
+        let mut name = String::new();
+        let mut field_type = String::new();
+        let mut db_type_annotation: Option<String> = None;
+        let mut functions: Vec<String> = vec![];
+        let mut parsing_function = false;
+        let mut function_buffer = String::new();
+        let mut open_brackets = 0;
+        let mut open_squirlys = 0;
+        let mut open_parens = 0;
+        let mut empty_skipped = 0;
+        let mut is_array = false;
+        let mut is_required = true;
+        let mut is_id = false;
+        let pieces: Vec<&str> = field_str.split(" ").collect();
+        for (i, piece) in pieces.into_iter().enumerate() {
+            if piece.len() == 0 {
+                empty_skipped = empty_skipped + 1;
+                continue;
+            }
+            if i - empty_skipped == 0 {
+                name.push_str(piece);
+                continue;
+            }
+            if i - empty_skipped == 1 {
+                field_type.push_str(piece);
+                if piece.contains("[]") {
+                    is_array = true;
+                }
+                if piece.contains("?") {
+                    is_required = false;
+                } else {
+                    is_required = true;
+                }
+                continue;
+            }
+            if piece.contains("@id") {
+                is_id = true;
+                continue;
+            }
+            if piece.contains("@db.") {
+                if db_type_annotation.is_some() {
+                    panic!("more than one db type annotation found");
+                } else {
+                    db_type_annotation = Some(piece.to_string());
+                }
+            }
+            if piece.contains("(") || piece.contains("[") || piece.contains("{") {
+                parsing_function = true;
+                open_parens = open_parens + piece.matches("(").count();
+                open_brackets = open_brackets + piece.matches("[").count();
+                open_squirlys = open_squirlys + piece.matches("{").count();
+            }
+            if parsing_function {
+                let mut to_push = format!("{}", piece);
+                if to_push.ends_with(",") {
+                    to_push.push_str(" ")
+                }
+                let _ = &function_buffer.push_str(to_push.as_str());
+            }
+            if piece.contains(")") || piece.contains("]") || piece.contains("}") {
+                open_parens = open_parens - piece.matches(")").count();
+                open_brackets = open_brackets - piece.matches("]").count();
+                open_squirlys = open_squirlys - piece.matches("}").count();
+                if open_parens == 0 && open_brackets == 0 && open_squirlys == 0 {
+                    parsing_function = false;
+                    if function_buffer.clone().len() > 0 {
+                        if function_buffer.starts_with("@db.") {
+                            db_type_annotation = Some(function_buffer.clone());
+                        } else {
+                            functions.push(function_buffer.clone());
+                        }
+                        function_buffer.clear();
+                        continue;
+                    }
+                }
+                continue;
+            }
+            continue;
+        }
+        if parsing_function {
+            panic!("Unterminated delimiter in {}", field_str);
+        }
+        if name == "}" {
+            return None;
+        }
+        let field = Field {
+            name,
+            target_name_width: 0,
+            field_type,
+            target_field_type_width: 0,
+            db_type_annotation,
+            is_array,
+            is_required,
+            is_id,
+            is_read_only: false,
+            is_unique: false,
+            relation: None,
+        };
+        Some(field)
     }
     fn set_name(&mut self, name: String) {
         self.name = name;
     }
+    fn set_target_name_length(&mut self, length: usize) {
+        self.target_name_width = length;
+    }
     fn set_field_type(&mut self, field_type: String) {
         self.field_type = field_type;
+    }
+    fn set_field_type_length(&mut self, length: usize) {
+        self.target_field_type_width = length;
     }
     fn set_is_required(&mut self, is_required: bool) {
         self.is_required = is_required;
     }
-    fn set_is_list(&mut self, is_list: bool) {
-        self.is_list = is_list;
+    fn set_is_list(&mut self, is_array: bool) {
+        self.is_array = is_array;
     }
     fn set_is_unique(&mut self, is_unique: bool) {
         self.is_unique = is_unique;
@@ -284,54 +563,36 @@ impl Field {
     fn set_is_read_only(&mut self, is_read_only: bool) {
         self.is_read_only = is_read_only;
     }
-    fn set_is_generated(&mut self, is_generated: bool) {
-        self.is_generated = is_generated;
-    }
-    fn set_is_relation(&mut self, is_relation: bool) {
-        self.is_relation = is_relation;
-    }
-    fn set_relation_name(&mut self, relation_name: String) {
-        self.relation_name = relation_name;
-    }
-    fn set_relation_from(&mut self, relation_from: String) {
-        self.relation_from = relation_from;
-    }
-    fn set_relation_to(&mut self, relation_to: String) {
-        self.relation_to = relation_to;
-    }
-    fn set_relation_on_delete(&mut self, relation_on_delete: String) {
-        self.relation_on_delete = relation_on_delete;
-    }
-    fn set_relation_on_update(&mut self, relation_on_update: String) {
-        self.relation_on_update = relation_on_update;
+    fn set_relation(&mut self, relation: Option<Relation>) {
+        self.relation = relation;
     }
     fn as_text(&self) -> String {
         let mut text = String::new();
         text.push_str(&self.name);
-        text.push_str("        ");
-        text.push_str(&self.field_type);
-        if self.is_list {
-            text.push_str("[]");
+        let spaces_to_add = self.target_name_width - self.name.len();
+        for _ in 0..spaces_to_add {
+            text.push_str(" ");
         }
-        if !self.is_required {
-            text.push_str("?");
-        }
-        text.push_str("        ");
         text.push_str(&self.field_type);
-        if self.is_unique {
-            text.push_str("@unique()");
+        let spaces_to_add = self.target_field_type_width - self.field_type.len();
+        for _ in 0..spaces_to_add {
+            text.push_str(" ");
         }
         if self.is_id {
-            text.push_str("@id");
+            text.push_str("@id ");
+        }
+        if self.is_unique {
+            text.push_str("@unique() ");
+        }
+        if self.db_type_annotation.is_some() {
+            text.push_str(self.db_type_annotation.clone().unwrap().as_str());
+            text.push_str(" ");
         }
         if self.is_read_only {
-            text.push_str("@readonly");
+            text.push_str("@readonly ");
         }
-        if self.is_generated {
-            text.push_str("@default");
-        }
-        if self.is_relation {
-            text.push_str("@relation");
+        if self.relation.is_some() {
+            text.push_str(self.relation.clone().unwrap().as_text().as_str())
         }
         text
     }

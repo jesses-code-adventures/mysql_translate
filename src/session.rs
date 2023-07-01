@@ -1,8 +1,10 @@
 use crate::database;
 use crate::json_translator::JsonTranslator;
 use crate::prisma_translator::PrismaTranslator;
+use crate::structure::TranslatorBehaviour;
 use crate::structure::{AcceptedFormat, DiskMapping};
 use dialoguer::Select;
+use serde_json;
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
@@ -73,9 +75,11 @@ impl<'a> Session<'a> {
     }
 
     pub fn create_database_entry(&mut self) -> Result<(), std::io::Error> {
+        print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
         println!("pls enter the database url:");
         let mut input = String::new();
         std::io::stdin().read_line(&mut input)?;
+        print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
         println!("what would you like to call this database?");
         let mut name = String::new();
         std::io::stdin().read_line(&mut name)?;
@@ -86,6 +90,7 @@ impl<'a> Session<'a> {
         });
         self.save()
             .unwrap_or_else(|_| println!("new database failed to save"));
+        println!("entry created successfully");
         Ok(())
     }
 
@@ -149,6 +154,7 @@ impl<'a> Session<'a> {
     }
 
     pub fn select_schema_to_write(&mut self) -> Result<(), std::io::Error> {
+        print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
         let _database = self.select_database();
         let options = vec!["json", "prisma", "exit"];
         let selection = Select::new()
@@ -157,14 +163,24 @@ impl<'a> Session<'a> {
             .items(&options)
             .interact()?;
         match options[selection] {
-            "json" => Ok(()),
-            "prisma" => Ok(()),
-            "exit" => Ok(()),
+            "json" => {
+                println!("Not yet implemented");
+                Ok(())
+            }
+            "prisma" => {
+                println!("Not yet implemented");
+                Ok(())
+            }
+            "exit" => {
+                println!("Not yet implemented");
+                Ok(())
+            }
             _ => Ok(()),
         }
     }
 
     pub fn select_schema_to_view(&self) -> Result<(), std::io::Error> {
+        print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
         let db_index = self.select_database()?;
         let options = AcceptedFormat::all_as_string_array();
         let selection = Select::new()
@@ -175,43 +191,30 @@ impl<'a> Session<'a> {
 
         match options[selection].as_str() {
             "json" => {
-                let translator = JsonTranslator {
+                let mut translator = JsonTranslator {
                     path: &self.databases[db_index].disk_mappings[selection].path,
+                    json: None,
                 };
-                translator.path.display();
-                let schema = self.databases[db_index].view_schema(AcceptedFormat::Json);
-                match schema {
-                    Some(x) => {
-                        println!("{:?}", serde_json::to_writer_pretty(std::io::stdout(), &x));
-                    }
-                    None => {
-                        println!("no schema found");
-                    }
-                }
+                let _ = translator.from_disk();
+                translator.display();
             }
             "prisma" => {
-                let mut mapping_index = 0;
-                let mut found = false;
-                for (i, mapping) in self.databases[db_index].disk_mappings.iter().enumerate() {
-                    if mapping.format == AcceptedFormat::Prisma {
-                        mapping_index = i;
-                        found = true;
-                    }
-                }
-                if !found {
-                    println!("no prisma schema found at the set path!");
-                    return Ok(());
-                }
-                let translator = PrismaTranslator {
-                    path: &self.databases[db_index].disk_mappings[mapping_index].path,
+                let mut translator = PrismaTranslator {
+                    path: &self.databases[db_index].disk_mappings[selection].path,
+                    prisma_schema: None,
                 };
-                translator.load();
+                let _ = translator.from_disk();
+                translator.display();
             }
-            _ => {}
+            _ => {
+                println!("no match")
+            }
         };
         Ok(())
     }
+
     pub fn main_menu(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        println!("\n\n");
         let selection = Select::new()
             .with_prompt("what would you like to do?")
             .default(0)
