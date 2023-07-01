@@ -14,6 +14,10 @@ pub struct PrismaTranslator<'a> {
 impl<'a> TranslatorBehaviour<PrismaSchema> for PrismaTranslator<'a> {
     fn from_database(&self, _database: &Vec<Table>) -> PrismaSchema {
         todo!();
+        // for table in database {
+        //     println!("{:?}", table);
+        // }
+        // PrismaSchema::new()
     }
 
     fn from_disk(&mut self) -> Result<PrismaSchema> {
@@ -24,7 +28,7 @@ impl<'a> TranslatorBehaviour<PrismaSchema> for PrismaTranslator<'a> {
     }
 
     fn to_disk(&self, _database: &Vec<Table>) {
-        println!("no prisma output configured");
+        todo!();
     }
 
     fn display(&self) {
@@ -32,6 +36,14 @@ impl<'a> TranslatorBehaviour<PrismaSchema> for PrismaTranslator<'a> {
             return;
         }
         println!("{}", self.prisma_schema.as_ref().unwrap().as_text());
+        let output_path = self.path.with_file_name("mysql_output.prisma");
+        println!("writing file to {}", output_path.display());
+        let res = fs::write(output_path, self.prisma_schema.as_ref().unwrap().as_text());
+        if res.is_ok() {
+            println!("success");
+        } else {
+            println!("failed");
+        }
     }
 }
 
@@ -264,7 +276,6 @@ impl Model {
             text.push_str("\n");
         }
         if self.directives.len() > 0 {
-            text.push_str("\n");
             for directive in &self.directives {
                 text.push_str("\n");
                 text.push_str(directive.as_str());
@@ -362,6 +373,7 @@ impl Relation {
         }
         relation
     }
+
     fn as_text(&self) -> String {
         let mut resp = String::new();
         resp.push_str("@relation(");
@@ -375,7 +387,7 @@ impl Relation {
                 resp.push_str(", ");
             }
             resp.push_str("references: [");
-            resp.push_str(self.fields.clone().unwrap().join(", ").as_str());
+            resp.push_str(self.references.clone().unwrap().join(", ").as_str());
             resp.push_str("]");
         }
         if self.map.is_some() {
@@ -399,6 +411,113 @@ impl Relation {
         resp.push_str(")");
         resp
     }
+
+    fn from_string(string: String) -> Relation {
+        let mut this_fields: Vec<String> = vec![];
+        let mut this_references: Vec<String> = vec![];
+        let mut this_map: String = String::new();
+        let mut this_on_update: String = String::new();
+        let mut this_on_delete: String = String::new();
+
+        println!("---> constructing relation from {}", string);
+
+        let mut new_string = string.clone();
+
+        new_string = new_string
+            .strip_prefix("@relation(")
+            .expect("input to be a relation string")
+            .to_string();
+
+        new_string = new_string
+            .strip_suffix(")")
+            .expect("relation string to end in a closing paren")
+            .to_string();
+
+        let pieces = new_string.split(", ");
+
+        println!("---> pieces");
+        for piece in pieces {
+            if piece.starts_with("fields:") {
+                println!("{:?}", piece);
+                let new_piece = piece
+                    .strip_prefix("fields:[")
+                    .expect("fields to be formatted correctly")
+                    .strip_suffix("]")
+                    .expect("fields to be formatted correctly");
+                let new_pieces = Some(new_piece.split(", "));
+                for sub_piece in new_pieces.unwrap() {
+                    this_fields.push(String::from(sub_piece.to_string()));
+                }
+            } else if piece.starts_with("references:") {
+                let new_piece = piece
+                    .strip_prefix("references:[")
+                    .expect("references to be formatted correctly")
+                    .strip_suffix("]")
+                    .expect("references to be formatted correctly");
+                let new_pieces = Some(new_piece.split(", "));
+                for sub_piece in new_pieces.unwrap() {
+                    this_references.push(String::from(sub_piece.to_string()));
+                }
+            } else if piece.starts_with("onDelete:") {
+                this_on_delete = piece
+                    .strip_prefix("onDelete:")
+                    .expect("on delete to be formatted correctly")
+                    .to_string();
+            } else if piece.starts_with("onUpdate:") {
+                this_on_update = piece
+                    .strip_prefix("onUpdate:")
+                    .expect("on delete to be formatted correctly")
+                    .to_string();
+            } else if piece.starts_with("map:") {
+                this_map = piece
+                    .strip_prefix("map:\"")
+                    .expect("map to be formatted correctly")
+                    .strip_suffix("\"")
+                    .expect("closing double quotes to exist")
+                    .to_string();
+            } else {
+                panic!("unhandled relation {:?}", piece);
+            }
+        }
+
+        let fields = if this_fields.len() > 0 {
+            Some(this_fields)
+        } else {
+            None
+        };
+
+        let references = if this_references.len() > 0 {
+            Some(this_references)
+        } else {
+            None
+        };
+
+        let map = if this_map.len() > 0 {
+            Some(this_map)
+        } else {
+            None
+        };
+
+        let on_update = if this_on_update.len() > 0 {
+            Some(this_on_update)
+        } else {
+            None
+        };
+
+        let on_delete = if this_on_delete.len() > 0 {
+            Some(this_on_delete)
+        } else {
+            None
+        };
+
+        Relation {
+            fields,
+            references,
+            map,
+            on_update,
+            on_delete,
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -414,6 +533,7 @@ struct Field {
     is_id: bool,
     is_read_only: bool,
     relation: Option<Relation>,
+    default: Option<String>,
 }
 
 impl Field {
@@ -430,6 +550,7 @@ impl Field {
             is_id: false,
             is_read_only: false,
             relation: None,
+            default: None,
         }
     }
     fn parse_from_disk(field_str: &str) -> Option<Field> {
@@ -439,6 +560,7 @@ impl Field {
         let mut name = String::new();
         let mut field_type = String::new();
         let mut db_type_annotation: Option<String> = None;
+        let mut relation: Option<Relation> = None;
         let mut functions: Vec<String> = vec![];
         let mut parsing_function = false;
         let mut function_buffer = String::new();
@@ -447,8 +569,10 @@ impl Field {
         let mut open_parens = 0;
         let mut empty_skipped = 0;
         let mut is_array = false;
+        let mut is_unique = false;
         let mut is_required = true;
         let mut is_id = false;
+        let mut default: Option<String> = None;
         let pieces: Vec<&str> = field_str.split(" ").collect();
         for (i, piece) in pieces.into_iter().enumerate() {
             if piece.len() == 0 {
@@ -474,6 +598,20 @@ impl Field {
             if piece.contains("@id") {
                 is_id = true;
                 continue;
+            }
+            if piece.contains("@unique") {
+                is_unique = true;
+                continue;
+            }
+            if piece.contains("@default") {
+                default = Some(
+                    piece
+                        .strip_prefix("@default(")
+                        .expect("default to be formatted properly")
+                        .strip_suffix(")")
+                        .expect("default to be formatted properly")
+                        .to_string(),
+                )
             }
             if piece.contains("@db.") {
                 if db_type_annotation.is_some() {
@@ -504,6 +642,8 @@ impl Field {
                     if function_buffer.clone().len() > 0 {
                         if function_buffer.starts_with("@db.") {
                             db_type_annotation = Some(function_buffer.clone());
+                        } else if function_buffer.starts_with("@relation") {
+                            relation = Some(Relation::from_string(function_buffer.clone()));
                         } else {
                             functions.push(function_buffer.clone());
                         }
@@ -516,7 +656,8 @@ impl Field {
             continue;
         }
         if parsing_function {
-            panic!("Unterminated delimiter in {}", field_str);
+            println!("Unterminated delimiter in {}", field_str);
+            return None;
         }
         if name == "}" {
             return None;
@@ -531,8 +672,9 @@ impl Field {
             is_required,
             is_id,
             is_read_only: false,
-            is_unique: false,
-            relation: None,
+            is_unique,
+            relation,
+            default,
         };
         Some(field)
     }
@@ -584,6 +726,11 @@ impl Field {
         if self.is_unique {
             text.push_str("@unique() ");
         }
+        if self.default.is_some() {
+            text.push_str("@default(");
+            text.push_str(self.default.as_ref().unwrap().as_str());
+            text.push_str(") ");
+        }
         if self.db_type_annotation.is_some() {
             text.push_str(self.db_type_annotation.clone().unwrap().as_str());
             text.push_str(" ");
@@ -592,7 +739,7 @@ impl Field {
             text.push_str("@readonly ");
         }
         if self.relation.is_some() {
-            text.push_str(self.relation.clone().unwrap().as_text().as_str())
+            text.push_str(self.relation.clone().unwrap().as_text().as_str());
         }
         text
     }
