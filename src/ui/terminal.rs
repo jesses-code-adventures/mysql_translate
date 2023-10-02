@@ -16,6 +16,9 @@ static MAIN_MENU_ITEMS: [&str; 8] = [
     "write one",
     "exit",
 ];
+static WELCOME_STRING: &str = "welcome to mysqueal translate~!";
+static GOODBYE_STRING: &str = "goodbye!";
+static NEWLINES_STRING: &str = "\n\n";
 
 pub struct TerminalUI {
     pub session: RefCell<Session>,
@@ -23,7 +26,7 @@ pub struct TerminalUI {
 
 impl TerminalUI {
     fn welcome(&self) {
-        println!("welcome to mysqueal translate~!");
+        println!("{}", WELCOME_STRING);
     }
 
     fn clear_terminal(&self) {
@@ -31,11 +34,11 @@ impl TerminalUI {
     }
 
     fn goodbye(&self) {
-        println!("goodbye!");
+        println!("{}", GOODBYE_STRING);
     }
 
     fn create_newlines(&self) {
-        println!("\n\n");
+        println!("{}", NEWLINES_STRING);
     }
 
     fn prompt_user_until_successful(&self, prompt: String) -> String {
@@ -72,6 +75,7 @@ impl TerminalUI {
 }
 
 impl UI for TerminalUI {
+    /// Create a new TerminalUI
     fn new(session: RefCell<Session>) -> Self {
         let resp = TerminalUI { session };
         resp.clear_terminal();
@@ -79,10 +83,12 @@ impl UI for TerminalUI {
         resp
     }
 
+    /// Get a non mutable reference to the session
     fn get_session(&self) -> std::cell::Ref<Session> {
         self.session.borrow()
     }
 
+    /// Get a mutable reference to the session
     fn get_session_mut(&self) -> std::cell::RefMut<Session> {
         self.session.borrow_mut()
     }

@@ -1,7 +1,7 @@
-use crate::json_translator::JsonTranslator;
-use crate::prisma_translator::PrismaTranslator;
 use crate::sql;
 use crate::structure::{AcceptedFormat, DiskMapping, TranslatorBehaviour};
+use crate::translators::json_translator::JsonTranslator;
+use crate::translators::prisma_translator::PrismaTranslator;
 use dialoguer::Select;
 use serde::Serialize;
 use serde_json::json;
@@ -51,27 +51,27 @@ impl Database {
         self.db_url = new_db_url;
     }
     /// TODO - move the UI parts to the UI
-    fn select_format(&self) -> AcceptedFormat {
-        let mut formats = AcceptedFormat::all_as_array();
-        let mut options = vec![];
-        for fmt in formats.iter_mut() {
-            options.push(fmt.as_string());
-        }
-        options.push("exit");
-        let selection = Select::new().items(&options).default(0).interact().unwrap();
-        match options[selection] {
-            "json" => return AcceptedFormat::Json,
-            "prisma" => return AcceptedFormat::Prisma,
-            "exit" => {
-                println!("defaulting to json...");
-                return AcceptedFormat::Json;
-            }
-            _ => {
-                println!("defaulting to json...");
-                return AcceptedFormat::Json;
-            }
-        }
-    }
+    // fn select_format(&self) -> AcceptedFormat {
+    //     let mut formats = AcceptedFormat::all_as_array();
+    //     let mut options = vec![];
+    //     for fmt in formats.iter_mut() {
+    //         options.push(fmt.as_string());
+    //     }
+    //     options.push("exit");
+    //     let selection = Select::new().items(&options).default(0).interact().unwrap();
+    //     match options[selection] {
+    //         "json" => return AcceptedFormat::Json,
+    //         "prisma" => return AcceptedFormat::Prisma,
+    //         "exit" => {
+    //             println!("defaulting to json...");
+    //             return AcceptedFormat::Json;
+    //         }
+    //         _ => {
+    //             println!("defaulting to json...");
+    //             return AcceptedFormat::Json;
+    //         }
+    //     }
+    // }
 
     /// Push a new disk mapping to the database. Does not save to disk.
     pub fn create_disk_mapping(&mut self, format: AcceptedFormat, path: String) {

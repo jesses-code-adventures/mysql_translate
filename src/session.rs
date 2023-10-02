@@ -1,7 +1,7 @@
 use crate::database;
-use crate::json_translator::JsonTranslator;
-use crate::prisma_translator::PrismaTranslator;
 use crate::structure::{AcceptedFormat, DiskMapping, TranslatorBehaviour};
+use crate::translators::json_translator::JsonTranslator;
+use crate::translators::prisma_translator::PrismaTranslator;
 use anyhow::Result;
 use serde_json;
 use std::fs::File;
@@ -97,11 +97,11 @@ impl Session {
         None
     }
 
-    fn remove_database(&mut self, index: usize) -> Result<()> {
-        self.databases.remove(index);
-        self.save()?;
-        Ok(())
-    }
+    // fn remove_database(&mut self, index: usize) -> Result<()> {
+    //     self.databases.remove(index);
+    //     self.save()?;
+    //     Ok(())
+    // }
 
     fn sort(&mut self) {
         self.databases.sort_by(|a, b| a.name.cmp(&b.name));

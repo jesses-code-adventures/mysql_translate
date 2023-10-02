@@ -117,11 +117,11 @@ impl PrismaTranslator {
         Ok(PrismaSchema::build(generator, datasource, models))
     }
 
-    fn test_db_pull_matches(&self, db_data: Vec<Table>) -> bool {
-        let disk_schema = self.parse_from_disk().expect("parse from disk to succeed");
-        let db_schema = self.get_translation(&db_data);
-        disk_schema == db_schema
-    }
+    // fn test_db_pull_matches(&self, db_data: Vec<Table>) -> bool {
+    //     let disk_schema = self.parse_from_disk().expect("parse from disk to succeed");
+    //     let db_schema = self.get_translation(&db_data);
+    //     disk_schema == db_schema
+    // }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq)]
@@ -226,12 +226,12 @@ impl Generator {
             provider,
         }
     }
-    fn set_name(&mut self, name: String) {
-        self.name = name;
-    }
-    fn set_provider(&mut self, provider: String) {
-        self.provider = provider;
-    }
+    // fn set_name(&mut self, name: String) {
+    //     self.name = name;
+    // }
+    // fn set_provider(&mut self, provider: String) {
+    //     self.provider = provider;
+    // }
     fn as_text(&self) -> String {
         format!(
             "generator {0} {{\n  provider = \"{1}\"\n}}",
@@ -253,12 +253,12 @@ impl Datasource {
             provider: String::from("mysql"),
         }
     }
-    fn set_name(&mut self, name: String) {
-        self.name = name;
-    }
-    fn set_provider(&mut self, provider: String) {
-        self.provider = provider;
-    }
+    // fn set_name(&mut self, name: String) {
+    //     self.name = name;
+    // }
+    // fn set_provider(&mut self, provider: String) {
+    //     self.provider = provider;
+    // }
     fn as_text(&self) -> String {
         format!(
             "datasource {} {{\n  provider = \"{}\"\n  url      = env(\"DATABASE_URL\")\n}}",
@@ -460,25 +460,25 @@ struct Relation {
 }
 
 impl Relation {
-    fn new(
-        map: Option<String>,
-        fields: Option<Vec<String>>,
-        references: Option<Vec<String>>,
-        on_update: Option<String>,
-        on_delete: Option<String>,
-    ) -> Relation {
-        let relation = Relation {
-            map,
-            fields,
-            references,
-            on_update,
-            on_delete,
-        };
-        if relation.map.is_none() || (relation.fields.is_none() && relation.references.is_none()) {
-            panic!("insufficient data found to construct relation");
-        }
-        relation
-    }
+    // fn new(
+    //     map: Option<String>,
+    //     fields: Option<Vec<String>>,
+    //     references: Option<Vec<String>>,
+    //     on_update: Option<String>,
+    //     on_delete: Option<String>,
+    // ) -> Relation {
+    //     let relation = Relation {
+    //         map,
+    //         fields,
+    //         references,
+    //         on_update,
+    //         on_delete,
+    //     };
+    //     if relation.map.is_none() || (relation.fields.is_none() && relation.references.is_none()) {
+    //         panic!("insufficient data found to construct relation");
+    //     }
+    //     relation
+    // }
 
     fn as_text(&self) -> String {
         let mut resp = String::new();
@@ -905,9 +905,9 @@ impl Field {
     fn set_is_id(&mut self, is_id: bool) {
         self.is_id = is_id;
     }
-    fn set_relation(&mut self, relation: Option<Relation>) {
-        self.relation = relation;
-    }
+    // fn set_relation(&mut self, relation: Option<Relation>) {
+    //     self.relation = relation;
+    // }
     fn as_text(&self) -> String {
         let mut text = String::new();
         text.push_str(&self.name);

@@ -1,18 +1,10 @@
-#![allow(dead_code)]
-mod database;
-mod json_translator;
-mod prisma_translator;
-mod session;
-mod set_env_variables;
-mod sql;
-mod structure;
-mod ui;
+use mysql_translate::session::Session;
+use mysql_translate::set_env_variables;
+use mysql_translate::structure::UI;
+use mysql_translate::ui::terminal::TerminalUI;
+
 use std::cell::RefCell;
 use std::env;
-
-use crate::session::Session;
-use crate::structure::UI;
-use crate::ui::terminal::TerminalUI;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Sets the environment variables using .env in the root directory.
