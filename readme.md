@@ -1,16 +1,39 @@
 # MySQL Translate
 
-Pulls your MySQL schemas and outputs them where you want, for a range of filetypes.
-Run from the command line.
+A Rust CLI tool for people that like to modify their mysql databases by hand and
+also enjoy using multiple ORMs.
 
 ## Why?
 
-Autogenerating the same schema with different output types can be useful if your
-database is being consumed by multiple projects you're working on.
+When I make a change to my database schema, I want to proliferate that change to
+my local projects that consume that database quickly and for multiple formats.
 
-## Where's it at?
-Only the JSON output is implemented so far, which prisma to be next.
+## What's supported?
 
-## Note
-Please note that this is just a convenience project for me and would need a lot
-of testing and additional output types to be particularly useful.
+JSON and Prisma are currently supported, but translators can be built by adding
+to src/translators/ (contributions are welcome).
+
+## Navigating the Project
+
+### src/functionality
+
+Here lies the core functionality of MySQL translate, namely the structs for Session,
+Database, DiskMapping and AcceptedFormat.
+
+### src/remotes
+
+Could theoretically contain multiple remote data sources, but currently only mysql is
+supported in sql.rs.
+
+### src/translators
+
+Specific implementations for each translator. Parsing logic for new translators should
+be added as their own file here and added as a variant to the AcceptedFormat variant
+in src/functionality. The behaviour.rs file provides the trait implementation
+for a new translator.
+
+### src/ui
+
+Specific implementations for different interactivity options. Currently only a janky TUI I made
+is available, but I'd like to use clap instead. The behaviour.rs file provides
+the trait implementation for a new interactivity option.

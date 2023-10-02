@@ -1,7 +1,11 @@
-use crate::functionality::database;
-use crate::functionality::structure::{AcceptedFormat, DiskMapping, TranslatorBehaviour};
-use crate::translators::json_translator::JsonTranslator;
-use crate::translators::prisma_translator::PrismaTranslator;
+use crate::functionality::{
+    database,
+    structure::{AcceptedFormat, DiskMapping},
+};
+use crate::translators::{
+    behaviour::TranslatorBehaviour, json_translator::JsonTranslator,
+    prisma_translator::PrismaTranslator,
+};
 use anyhow::Result;
 use serde_json;
 use std::fs::File;

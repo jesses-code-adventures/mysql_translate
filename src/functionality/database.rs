@@ -1,7 +1,9 @@
-use crate::functionality::structure::{AcceptedFormat, DiskMapping, TranslatorBehaviour};
+use crate::functionality::structure::{AcceptedFormat, DiskMapping};
 use crate::remotes::sql;
-use crate::translators::json_translator::JsonTranslator;
-use crate::translators::prisma_translator::PrismaTranslator;
+use crate::translators::{
+    behaviour::TranslatorBehaviour, json_translator::JsonTranslator,
+    prisma_translator::PrismaTranslator,
+};
 use dialoguer::Select;
 use serde::Serialize;
 use serde_json::json;

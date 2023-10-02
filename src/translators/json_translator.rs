@@ -1,5 +1,5 @@
-use crate::functionality::structure::TranslatorBehaviour;
 use crate::remotes::sql::{Description, Table};
+use crate::translators::behaviour::TranslatorBehaviour;
 use anyhow::Result;
 use serde_json::json;
 use std::collections::HashMap;

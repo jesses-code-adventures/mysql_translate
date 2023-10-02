@@ -1,5 +1,5 @@
-use crate::functionality::structure::TranslatorBehaviour;
 use crate::remotes::sql::{Description, Table};
+use crate::translators::behaviour::TranslatorBehaviour;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};

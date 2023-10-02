@@ -1,7 +1,12 @@
 use mysql_translate::{
-    session::Session,
-    structure::{get_session_data_location, AcceptedFormat, DiskMapping, TranslatorBehaviour},
-    translators::{json_translator::JsonTranslator, prisma_translator::PrismaTranslator},
+    functionality::{
+        session::Session,
+        structure::{get_session_data_location, AcceptedFormat, DiskMapping},
+    },
+    translators::{
+        behaviour::TranslatorBehaviour, json_translator::JsonTranslator,
+        prisma_translator::PrismaTranslator,
+    },
 };
 
 #[test]

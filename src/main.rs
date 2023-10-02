@@ -1,8 +1,7 @@
-use mysql_translate::functionality::{
-    session::Session,
-    structure::{get_session_data_location, UI},
+use mysql_translate::{
+    functionality::{session::Session, structure::get_session_data_location},
+    ui::{behaviour::UI, terminal::TerminalUI},
 };
-use mysql_translate::ui::terminal::TerminalUI;
 
 use std::cell::RefCell;
 

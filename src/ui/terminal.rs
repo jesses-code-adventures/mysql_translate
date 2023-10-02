@@ -2,10 +2,9 @@ use anyhow::Result;
 use dialoguer::Select;
 use std::cell::RefCell;
 
-use crate::functionality::{
-    database,
-    session::Session,
-    structure::{AcceptedFormat, UI},
+use crate::{
+    functionality::{database, session::Session, structure::AcceptedFormat},
+    ui::behaviour::UI,
 };
 
 static MAIN_MENU_ITEMS: [&str; 8] = [
@@ -22,6 +21,8 @@ static WELCOME_STRING: &str = "welcome to mysqueal translate~!";
 static GOODBYE_STRING: &str = "goodbye!";
 static NEWLINES_STRING: &str = "\n\n";
 
+/// A TUI implementation for mysql translate.
+/// Probably not the nicest way to do this.
 pub struct TerminalUI {
     pub session: RefCell<Session>,
 }
