@@ -1,55 +1,70 @@
-use crate::sql::Table;
+use crate::sql::{Description, Table};
 use crate::structure::TranslatorBehaviour;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
-use std::path::Path;
+use std::path::PathBuf;
 
-pub struct PrismaTranslator<'a> {
-    pub path: &'a Path,
-    pub prisma_schema: Option<PrismaSchema>,
+pub struct PrismaTranslator {
+    pub path: String,
+    pub disk_schema: Option<PrismaSchema>,
+    pub db_schema: Option<PrismaSchema>,
 }
 
-impl<'a> TranslatorBehaviour<PrismaSchema> for PrismaTranslator<'a> {
-    fn from_database(&self, _database: &Vec<Table>) -> PrismaSchema {
-        todo!();
-        // for table in database {
-        //     println!("{:?}", table);
-        // }
-        // PrismaSchema::new()
+impl TranslatorBehaviour<PrismaSchema> for PrismaTranslator {
+    fn get_translation(&self, database: &Vec<Table>) -> PrismaSchema {
+        PrismaSchema::from(database)
     }
 
-    fn from_disk(&mut self) -> Result<PrismaSchema> {
-        if self.prisma_schema.is_none() {
-            self.prisma_schema = Some(self.parse_from_disk());
+    fn load_from_database(&mut self, database: &Vec<Table>) {
+        self.db_schema = Some(self.get_translation(database));
+    }
+
+    fn load_from_disk(&mut self) -> Result<()> {
+        let loaded = self.parse_from_disk()?;
+        if self.disk_schema.is_none() {
+            self.disk_schema = Some(loaded);
         }
-        Ok(self.prisma_schema.clone().unwrap())
+        Ok(())
     }
 
-    fn to_disk(&self, _database: &Vec<Table>) {
-        todo!();
-    }
-
-    fn display(&self) {
-        if self.prisma_schema.is_none() {
-            return;
-        }
-        println!("{}", self.prisma_schema.as_ref().unwrap().as_text());
-        let output_path = self.path.with_file_name("mysql_output.prisma");
-        println!("writing file to {}", output_path.display());
-        let res = fs::write(output_path, self.prisma_schema.as_ref().unwrap().as_text());
+    fn write_to_disk(&self, database: &Vec<Table>) {
+        let mut output_path_buf = PathBuf::new();
+        output_path_buf.push(&self.path);
+        let output_path_buf = output_path_buf.with_file_name("mysql_output_from_db.prisma");
+        let output_path = output_path_buf.as_path();
+        let schema = PrismaSchema::from(database);
+        let res = fs::write(output_path.clone().to_str().unwrap(), schema.as_text());
         if res.is_ok() {
             println!("success");
         } else {
             println!("failed");
         }
     }
+
+    fn get_string(&self) -> String {
+        if self.disk_schema.is_none() && self.db_schema.is_none() {
+            return String::new();
+        }
+        let mut resp = String::new();
+        if self.disk_schema.is_some() {
+            resp.push_str("disk schema:\n\n");
+            resp.push_str(&self.disk_schema.as_ref().unwrap().as_text());
+            resp.push_str("\n\n");
+        }
+        if self.db_schema.is_some() {
+            resp.push_str("disk schema:\n\n");
+            resp.push_str(&self.db_schema.as_ref().unwrap().as_text());
+            resp.push_str("\n\n");
+        }
+        resp
+    }
 }
 
-impl PrismaTranslator<'_> {
-    pub fn parse_from_disk(&self) -> PrismaSchema {
-        let file = File::open(self.path).unwrap();
+impl PrismaTranslator {
+    pub fn parse_from_disk(&self) -> Result<PrismaSchema> {
+        let file = File::open(self.path.clone()).unwrap();
         let mut generator_str = String::new();
         let mut data_source_str = String::new();
         let mut models_str = String::new();
@@ -99,11 +114,17 @@ impl PrismaTranslator<'_> {
             }
             models.push(model.unwrap());
         }
-        PrismaSchema::build(generator, datasource, models)
+        Ok(PrismaSchema::build(generator, datasource, models))
+    }
+
+    fn test_db_pull_matches(&self, db_data: Vec<Table>) -> bool {
+        let disk_schema = self.parse_from_disk().expect("parse from disk to succeed");
+        let db_schema = self.get_translation(&db_data);
+        disk_schema == db_schema
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq)]
 pub struct PrismaSchema {
     generator: Generator,
     datasource: Datasource,
@@ -161,7 +182,26 @@ impl PrismaSchema {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl PartialEq for PrismaSchema {
+    fn eq(&self, other: &Self) -> bool {
+        self.generator == other.generator
+            && self.datasource == other.datasource
+            && self.models == other.models
+    }
+}
+
+impl From<&Vec<Table>> for PrismaSchema {
+    fn from(tables: &Vec<Table>) -> Self {
+        let mut prisma_schema = PrismaSchema::new();
+        for table in tables {
+            let model = Model::from(table);
+            prisma_schema.add_model(model);
+        }
+        prisma_schema
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 struct Generator {
     name: String,
     provider: String,
@@ -200,7 +240,7 @@ impl Generator {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 struct Datasource {
     name: String,
     provider: String,
@@ -247,7 +287,7 @@ impl Datasource {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, Eq)]
 pub struct Model {
     name: String,
     fields: Vec<Field>,
@@ -344,7 +384,73 @@ impl Model {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+impl From<&Table> for Model {
+    fn from(table: &Table) -> Self {
+        let mut model = Model::new();
+        model.set_name(table.name.clone());
+        for description in table.description.clone().into_iter() {
+            let field = Field::from(description);
+            model.add_field(field);
+        }
+        model.name_column_width = model.fields.iter().map(|f| f.name.len()).max().unwrap();
+        model.field_type_column_width = model
+            .fields
+            .iter()
+            .map(|f| f.field_type.len())
+            .max()
+            .unwrap();
+        // todo: add directives
+        model
+    }
+}
+
+impl PartialEq for Model {
+    fn eq(&self, other: &Self) -> bool {
+        if !self.name.eq(&other.name) {
+            println!(
+                "found mismatching name on {}. self: {}, other: {}",
+                self.name, self.name, other.name
+            );
+            return false;
+        }
+        for directive in self.directives.iter() {
+            let other_directive = other.directives.iter().find(|d| d.clone() == directive); // This sucks heavily
+            if other_directive.is_none() {
+                println!("directive {} not found in other {}", directive, self.name);
+                return false;
+            }
+        }
+        for field in self.fields.iter() {
+            println!("comparing field {} to other", field.name);
+            let other_field = other.fields.iter().find(|f| f.name == field.name);
+            if other_field.is_none() {
+                println!("field {} not found in other", field.name);
+                return false;
+            }
+            if field.to_owned() != other_field.unwrap().to_owned() {
+                println!("field {} not equal to other", field.name);
+                return false;
+            }
+        }
+        if self.name_column_width != other.name_column_width {
+            println!(
+                "found mismatching name_column_width on {}. self: {}, other: {}",
+                self.name, self.name_column_width, other.name_column_width
+            );
+            return false;
+        }
+        if self.field_type_column_width != other.field_type_column_width {
+            println!(
+                "found mismatching field_type_column_width on {}. self: {}, other: {}",
+                self.name, self.field_type_column_width, other.field_type_column_width
+            );
+            return false;
+        }
+        true
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Eq)]
 struct Relation {
     map: Option<String>,
     fields: Option<Vec<String>>,
@@ -430,7 +536,7 @@ impl Relation {
 
         new_string = new_string
             .strip_suffix(")")
-            .expect("relation string to end in a closing paren")
+            .expect("relation string to have a closing paren")
             .to_string();
 
         let pieces = new_string.split(", ");
@@ -520,7 +626,92 @@ impl Relation {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+impl PartialEq for Relation {
+    fn eq(&self, other: &Self) -> bool {
+        let resp = self.fields == other.fields
+            && self.references == other.references
+            && self.map == other.map
+            && self.on_update == other.on_update
+            && self.on_delete == other.on_delete;
+        if !resp {
+            println!("in relation");
+            println!("---> {:?} != {:?}", self.fields, other.fields);
+            println!("---> {:?} != {:?}", self.references, other.references);
+            println!("---> {:?} != {:?}", self.map, other.map);
+            println!("---> {:?} != {:?}", self.on_update, other.on_update);
+            println!("---> {:?} != {:?}", self.on_delete, other.on_delete);
+        }
+        resp
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Eq)]
+struct UniqueFlag {
+    pub map: Option<String>,
+}
+
+impl UniqueFlag {
+    pub fn as_text(self) -> String {
+        let mut resp = String::new();
+        resp.push_str("@unique");
+        if self.map.is_some() {
+            resp.push_str("(map: \"");
+            resp.push_str(self.map.clone().unwrap().as_str());
+            resp.push_str("\")");
+        }
+        resp
+    }
+}
+
+impl PartialEq for UniqueFlag {
+    fn eq(&self, other: &Self) -> bool {
+        let resp = self.map == other.map;
+        if !resp {
+            println!("in unique flag");
+            println!("---> {:?} != {:?}", self.map, other.map);
+        }
+        self.map == other.map
+    }
+}
+
+impl From<&str> for UniqueFlag {
+    fn from(string: &str) -> Self {
+        let mut new_string = string.clone();
+
+        if new_string.starts_with("@") {
+            new_string = new_string
+                .strip_prefix("@")
+                .expect("input to be a unique string");
+        }
+
+        new_string = new_string
+            .strip_prefix("unique")
+            .expect("input to be a unique string");
+
+        if new_string.len() == 0 {
+            return UniqueFlag { map: None };
+        }
+
+        new_string = new_string
+            .trim()
+            .strip_prefix("(")
+            .expect("unique string to start with an opening paren")
+            .strip_suffix(")")
+            .expect("unique string to end in a closing paren");
+
+        new_string = new_string
+            .strip_prefix("map: \"")
+            .expect("map to be formatted correctly")
+            .strip_suffix("\"")
+            .expect("closing double quotes to exist");
+
+        UniqueFlag {
+            map: Some(new_string.to_string()),
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Eq)]
 struct Field {
     name: String,
     target_name_width: usize,
@@ -529,11 +720,10 @@ struct Field {
     db_type_annotation: Option<String>,
     is_required: bool,
     is_array: bool,
-    is_unique: bool,
     is_id: bool,
-    is_read_only: bool,
     relation: Option<Relation>,
     default: Option<String>,
+    unique: Option<UniqueFlag>,
 }
 
 impl Field {
@@ -546,17 +736,17 @@ impl Field {
             db_type_annotation: None,
             is_required: false,
             is_array: false,
-            is_unique: false,
             is_id: false,
-            is_read_only: false,
             relation: None,
             default: None,
+            unique: None,
         }
     }
     fn parse_from_disk(field_str: &str) -> Option<Field> {
         if field_str.starts_with("@@") || field_str.starts_with("@relation") {
             panic!("uncaught directive {}", field_str);
         }
+        let mut field_str_mut = field_str.clone().to_string();
         let mut name = String::new();
         let mut field_type = String::new();
         let mut db_type_annotation: Option<String> = None;
@@ -569,11 +759,29 @@ impl Field {
         let mut open_parens = 0;
         let mut empty_skipped = 0;
         let mut is_array = false;
-        let mut is_unique = false;
         let mut is_required = true;
         let mut is_id = false;
         let mut default: Option<String> = None;
-        let pieces: Vec<&str> = field_str.split(" ").collect();
+        let mut unique: Option<UniqueFlag> = None;
+
+        // Handle unique piece and remove it if it exists
+        if field_str_mut.contains("@unique") {
+            let pieces: Vec<&str> = field_str.split("@").collect::<Vec<&str>>()[1..].to_vec();
+            let mut unique_piece = "@".to_string();
+            unique_piece.push_str(
+                pieces
+                    .into_iter()
+                    .filter(|piece| piece.contains("unique"))
+                    .collect::<Vec<&str>>()
+                    .pop()
+                    .unwrap(),
+            );
+            field_str_mut = field_str_mut.replace(unique_piece.as_str(), "");
+            unique = Some(UniqueFlag::from(unique_piece.as_str()));
+        }
+
+        // Iterate through the rest of the line as words
+        let pieces: Vec<&str> = field_str_mut.split(" ").collect();
         for (i, piece) in pieces.into_iter().enumerate() {
             if piece.len() == 0 {
                 empty_skipped = empty_skipped + 1;
@@ -597,10 +805,6 @@ impl Field {
             }
             if piece.contains("@id") {
                 is_id = true;
-                continue;
-            }
-            if piece.contains("@unique") {
-                is_unique = true;
                 continue;
             }
             if piece.contains("@default") {
@@ -656,7 +860,7 @@ impl Field {
             continue;
         }
         if parsing_function {
-            println!("Unterminated delimiter in {}", field_str);
+            println!("Unterminated delimiter in {}", field_str_mut);
             return None;
         }
         if name == "}" {
@@ -671,10 +875,9 @@ impl Field {
             is_array,
             is_required,
             is_id,
-            is_read_only: false,
-            is_unique,
             relation,
             default,
+            unique,
         };
         Some(field)
     }
@@ -687,23 +890,20 @@ impl Field {
     fn set_field_type(&mut self, field_type: String) {
         self.field_type = field_type;
     }
+    fn set_db_type_annotation(&mut self, db_type_annotation: String) {
+        self.db_type_annotation = Some(db_type_annotation);
+    }
     fn set_field_type_length(&mut self, length: usize) {
         self.target_field_type_width = length;
     }
     fn set_is_required(&mut self, is_required: bool) {
         self.is_required = is_required;
     }
-    fn set_is_list(&mut self, is_array: bool) {
-        self.is_array = is_array;
-    }
-    fn set_is_unique(&mut self, is_unique: bool) {
-        self.is_unique = is_unique;
+    fn set_unique(&mut self, unique: Option<UniqueFlag>) {
+        self.unique = unique;
     }
     fn set_is_id(&mut self, is_id: bool) {
         self.is_id = is_id;
-    }
-    fn set_is_read_only(&mut self, is_read_only: bool) {
-        self.is_read_only = is_read_only;
     }
     fn set_relation(&mut self, relation: Option<Relation>) {
         self.relation = relation;
@@ -723,8 +923,9 @@ impl Field {
         if self.is_id {
             text.push_str("@id ");
         }
-        if self.is_unique {
-            text.push_str("@unique() ");
+        if self.unique.is_some() {
+            text.push_str(self.unique.as_ref().unwrap().clone().as_text().as_str());
+            text.push_str(" ");
         }
         if self.default.is_some() {
             text.push_str("@default(");
@@ -735,12 +936,76 @@ impl Field {
             text.push_str(self.db_type_annotation.clone().unwrap().as_str());
             text.push_str(" ");
         }
-        if self.is_read_only {
-            text.push_str("@readonly ");
-        }
         if self.relation.is_some() {
             text.push_str(self.relation.clone().unwrap().as_text().as_str());
         }
         text
+    }
+    fn get_field_type_from_db_type(&self, db_type: &str) -> String {
+        let db_type = db_type.to_lowercase();
+        match db_type {
+            _ if db_type.contains("tinyint") => "Boolean".to_string(),
+            _ if db_type.contains("smallint") => "Int".to_string(),
+            _ if db_type.contains("mediumint") => "Int".to_string(),
+            _ if db_type.contains("int") => "Int".to_string(),
+            _ if db_type.contains("bigint") => "Int".to_string(),
+            _ if db_type.contains("float") => "Float".to_string(),
+            _ if db_type.contains("double") => "Float".to_string(),
+            _ if db_type.contains("decimal") => "Float".to_string(),
+            _ if db_type.contains("date") => "DateTime".to_string(),
+            _ if db_type.contains("time") => "DateTime".to_string(),
+            _ if db_type.contains("timestamp") => "DateTime".to_string(),
+            _ if db_type.contains("year") => "Int".to_string(),
+            _ if db_type.contains("bool") => "Boolean".to_string(),
+            _ => "String".to_string(),
+        }
+    }
+}
+
+impl From<Description> for Field {
+    fn from(description: Description) -> Self {
+        println!("description: {:?}", description);
+        let mut field = Field::new();
+        field.set_name(description.field);
+        field.set_is_id(description.key.contains("PRI"));
+        field.set_is_required(description.null == "NO");
+        field.set_unique(match description.key.contains("PRI") {
+            true => Some(UniqueFlag { map: None }),
+            false => match description.key.contains("UNI") {
+                true => Some(UniqueFlag { map: None }),
+                false => None,
+            },
+        });
+        field.set_field_type(field.get_field_type_from_db_type(description.type_.as_str()));
+        field.set_db_type_annotation(description.type_.clone());
+        field.default = match description.default {
+            Some(ref default) => match default.as_str() {
+                "CURRENT_TIMESTAMP" => Some("now()".to_string()),
+                _ => Some(default.clone()),
+            },
+            None => None,
+        };
+        field.set_target_name_length(field.name.len());
+        field.set_field_type_length(field.field_type.len());
+        println!("field: {:?}", field);
+        field
+    }
+}
+
+impl PartialEq for Field {
+    fn eq(&self, other: &Self) -> bool {
+        let resp = self.name == other.name
+            && self.field_type == other.field_type
+            && self.is_id == other.is_id
+            && self.is_required == other.is_required
+            && self.unique == other.unique
+            && self.default == other.default
+            && self.db_type_annotation == other.db_type_annotation
+            && self.relation == other.relation;
+        if !resp {
+            println!("self: {:?}", self);
+            println!("other: {:?}", other);
+        }
+        resp
     }
 }

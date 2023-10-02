@@ -5,19 +5,17 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufWriter;
-use std::path::Path;
 
 /// A translator for json
-pub struct JsonTranslator<'a> {
-    // pub disk_mapping: &'a DiskMapping<'a>,
-    pub path: &'a Path,
+pub struct JsonTranslator {
+    pub path: String,
     pub json: Option<serde_json::Value>,
 }
 
 /// Public implementation for JsonTranslator
-impl<'a> TranslatorBehaviour<serde_json::Value> for JsonTranslator<'a> {
-    /// Converts a vector of sql::Table to a json object
-    fn from_database(&self, database: &Vec<Table>) -> serde_json::Value {
+impl TranslatorBehaviour<serde_json::Value> for JsonTranslator {
+    /// Get json data from the database's output
+    fn get_translation(&self, database: &Vec<Table>) -> serde_json::Value {
         let mut result = HashMap::new();
         for database in database {
             result.insert(
@@ -30,34 +28,42 @@ impl<'a> TranslatorBehaviour<serde_json::Value> for JsonTranslator<'a> {
         json!(tables)
     }
 
-    /// Load json from a path.
-    fn from_disk(&mut self) -> Result<serde_json::Value> {
-        let file = File::open(&self.path)?;
-        let val = serde_json::from_reader(file).unwrap_or_else(|_| {
-            println!("couldn't read the file! loading an empty one...");
-            json!({})
-        });
-        self.json = Some(val);
-        Ok(self.json.clone().unwrap())
+    /// Load json from a database into the translator.
+    fn load_from_database(&mut self, database: &Vec<Table>) {
+        self.json = Some(self.get_translation(database))
     }
 
-    /// Converts a vector of sql::Table to a json object and dumps to disk.
-    fn to_disk(&self, database: &Vec<Table>) {
-        println!("writing json to {:?}", &self.path.to_str());
-        let the_json = self.from_database(database);
+    /// Load json from a path into the translator.
+    fn load_from_disk(&mut self) -> Result<()> {
+        let file = File::open(&self.path)?;
+        let val = serde_json::from_reader(file).unwrap_or_else(|_| {
+            println!("couldn't read the file! skipping loading...");
+            serde_json::Value::Null
+        });
+        if !val.is_null() {
+            self.json = Some(val);
+        }
+        Ok(())
+    }
+
+    /// Receive data from the datbase and write straight to disk.
+    fn write_to_disk(&self, database: &Vec<Table>) {
+        println!("writing json to {}", &self.path);
+        let the_json = self.get_translation(database);
         match self.dump_json(&the_json) {
             Ok(_) => (),
             Err(e) => println!("error writing json: {}", e),
         }
     }
 
-    fn display(&self) {
-        todo!();
+    /// A pretty string representation of the translator's json.
+    fn get_string(&self) -> String {
+        return serde_json::to_string_pretty(self.json.as_ref().unwrap()).unwrap();
     }
 }
 
 /// Private implementation behaviours for JsonTranslator
-impl<'a> JsonTranslator<'a> {
+impl JsonTranslator {
     /// Formats one database table description.
     fn format_table(&self, database: &Description) -> String {
         let mut result = String::new();
@@ -82,7 +88,7 @@ impl<'a> JsonTranslator<'a> {
 
     /// Write json to a path.
     fn dump_json(&self, the_json: &serde_json::Value) -> Result<(), std::io::Error> {
-        let file = File::create(self.path)?;
+        let file = File::create(self.path.clone())?;
         let buf_writer = BufWriter::new(file);
         match serde_json::ser::to_writer_pretty(buf_writer, &the_json) {
             Ok(_) => Ok(()),

@@ -6,28 +6,29 @@ mod session;
 mod set_env_variables;
 mod sql;
 mod structure;
+mod ui;
+use std::cell::RefCell;
+use std::env;
 
-fn welcome() {
-    println!("hello! welcome to translate.");
-}
+use crate::session::Session;
+use crate::structure::UI;
+use crate::ui::terminal::TerminalUI;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Sets the environment variables using .env in the root directory.
-    print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
-    welcome();
     set_env_variables::set_vars();
-    let mut session = session::Session {
-        _data_location: String::from(".data/session.json"),
-        databases: vec![],
-    };
-    session.load()?;
-    if session.databases.len() == 0 {
-        session.create_database_entry()?;
-        session.databases[0].edit();
-        session.save()?;
+    let mut data_location =
+        env::var("STORAGE").expect("storage directory to exist as an environment variable");
+    data_location.push_str("/session.json");
+    let mut session_wrapped = Session::new(&data_location);
+    if session_wrapped.is_none() {
+        session_wrapped = Session::new_bare_session(&data_location);
     }
-    session.load()?;
-    session.main_menu()?;
-    println!("\ngoodbye!");
+    let session = RefCell::new(session_wrapped.expect("session to exist"));
+    let mut ui = TerminalUI::new(session);
+    if ui.get_session().databases.len() == 0 {
+        ui.create_database_entry()?;
+    }
+    ui.main_loop()?;
     Ok(())
 }

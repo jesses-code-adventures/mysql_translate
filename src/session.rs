@@ -1,31 +1,44 @@
 use crate::database;
 use crate::json_translator::JsonTranslator;
 use crate::prisma_translator::PrismaTranslator;
-use crate::structure::TranslatorBehaviour;
-use crate::structure::{AcceptedFormat, DiskMapping};
-use dialoguer::Select;
+use crate::structure::{AcceptedFormat, DiskMapping, TranslatorBehaviour};
+use anyhow::Result;
 use serde_json;
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
 
-pub struct Session<'a> {
-    pub databases: Vec<database::Database<'a>>,
+#[derive(Clone)]
+pub struct Session {
+    pub databases: Vec<database::Database>,
     pub _data_location: String,
 }
 
-impl<'a> Session<'a> {
-    pub fn new(full_path: &String) -> Session {
+impl Session {
+    /// If None is returned, use new_bare_session and then create a database entry from the UI
+    /// consuming the session.
+    pub fn new(full_path: &String) -> Option<Session> {
         let mut s = Session {
             databases: Vec::new(),
             _data_location: full_path.to_string(),
         };
-        s.load()
-            .unwrap_or_else(|_| println!("failed to load session"));
-        return s;
+        s.load().ok()?;
+        if s.databases.len() == 0 {
+            return None;
+        }
+        return Some(s);
     }
 
-    pub fn load(&mut self) -> Result<(), std::io::Error> {
+    /// Create a new session with no databases.
+    pub fn new_bare_session(full_path: &String) -> Option<Session> {
+        Some(Session {
+            databases: Vec::new(),
+            _data_location: full_path.to_string(),
+        })
+    }
+
+    /// Load an existing session from the disk.
+    pub fn load(&mut self) -> Result<()> {
         let path = Path::new(self._data_location.as_str());
         let file = File::open(&path).unwrap_or_else(|_| File::create(&path).unwrap());
         let reader = std::io::BufReader::new(file);
@@ -34,31 +47,30 @@ impl<'a> Session<'a> {
         for mut database in the_json {
             let name = database["name"].as_str().unwrap().to_string();
             let db_url = database["db_url"].as_str().unwrap().to_string();
-            let disk_mappings = DiskMapping::from_json(database["disk_mappings"].take()).unwrap();
+            let disk_mappings = DiskMapping::from_json(database["disk_mappings"].take())
+                .expect("disk mappings to parse successfully from json");
             let database = database::Database {
                 name,
                 db_url,
                 disk_mappings,
             };
-            self.add_database(database);
+            self.add_database(database)
+                .expect("adding database should work");
         }
         Ok(())
     }
 
-    pub fn add_database(&mut self, database: database::Database<'a>) {
-        if database.db_url.len() == 0 {
-            println!("Database url is empty. Skipping.");
-            return;
-        }
+    /// Save the session to the disk.
+    pub fn add_database(&mut self, database: database::Database) -> Result<()> {
         if self
             .find_existing_database_index(&database.db_url)
             .is_some()
         {
-            return;
+            return Ok(());
         }
         self.databases.push(database);
-        self.save()
-            .unwrap_or_else(|_| println!("database failed to save"));
+        self.save()?;
+        Ok(())
     }
 
     pub fn display(&mut self) {
@@ -74,26 +86,6 @@ impl<'a> Session<'a> {
         }
     }
 
-    pub fn create_database_entry(&mut self) -> Result<(), std::io::Error> {
-        print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
-        println!("pls enter the database url:");
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input)?;
-        print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
-        println!("what would you like to call this database?");
-        let mut name = String::new();
-        std::io::stdin().read_line(&mut name)?;
-        self.add_database(database::Database {
-            name: name.trim().to_string(),
-            db_url: input.trim().to_string(),
-            disk_mappings: Vec::new(),
-        });
-        self.save()
-            .unwrap_or_else(|_| println!("new database failed to save"));
-        println!("entry created successfully");
-        Ok(())
-    }
-
     fn find_existing_database_index(&self, db_url: &str) -> Option<usize> {
         let mut index = 0;
         for database in &self.databases {
@@ -105,16 +97,18 @@ impl<'a> Session<'a> {
         None
     }
 
-    fn remove_database(&mut self, index: usize) {
+    fn remove_database(&mut self, index: usize) -> Result<()> {
         self.databases.remove(index);
-        self.save()
-            .unwrap_or_else(|_| println!("saving failed on removal"));
+        self.save()?;
+        Ok(())
     }
 
-    pub fn sort(&mut self) {
+    fn sort(&mut self) {
         self.databases.sort_by(|a, b| a.name.cmp(&b.name));
     }
 
+    /// Write the session's databases to the disk.
+    /// This does not write the schemas themselves, instead it saves the database names and urls.
     pub fn save(&self) -> Result<(), serde_json::Error> {
         let path = Path::new(self._data_location.as_str());
         let file = File::create(&path).unwrap();
@@ -128,138 +122,107 @@ impl<'a> Session<'a> {
         Ok(())
     }
 
-    /// Returns the index of the selected database in self.databases
-    pub fn select_database(&self) -> Result<usize, std::io::Error> {
-        let selection = Select::new()
-            .with_prompt("select a database")
-            .default(0)
-            .items(
-                &self
-                    .databases
-                    .iter()
-                    .map(|database| database.name.as_str())
-                    .collect::<Vec<_>>(),
-            )
-            .interact()?;
-        Ok(selection)
-    }
-
-    pub fn edit_databases(&mut self) -> Result<(), std::io::Error> {
-        let mut edit_another = true;
-        while edit_another {
-            let db_index = self.select_database()?;
-            edit_another = self.databases[db_index].edit();
-        }
-        Ok(())
-    }
-
-    pub fn select_schema_to_write(&mut self) -> Result<(), std::io::Error> {
-        print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
-        let _database = self.select_database();
-        let options = vec!["json", "prisma", "exit"];
-        let selection = Select::new()
-            .with_prompt("which schema would you like to write?")
-            .default(0)
-            .items(&options)
-            .interact()?;
-        match options[selection] {
-            "json" => {
-                println!("Not yet implemented");
-                Ok(())
-            }
-            "prisma" => {
-                println!("Not yet implemented");
-                Ok(())
-            }
-            "exit" => {
-                println!("Not yet implemented");
-                Ok(())
-            }
-            _ => Ok(()),
-        }
-    }
-
-    pub fn select_schema_to_view(&self) -> Result<(), std::io::Error> {
-        print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
-        let db_index = self.select_database()?;
-        let options = AcceptedFormat::all_as_string_array();
-        let selection = Select::new()
-            .with_prompt("which schema would you like to see?")
-            .default(0)
-            .items(&options)
-            .interact()?;
-
+    pub fn view_table_from_disk(
+        &self,
+        selection: usize,
+        db_index: usize,
+        options: &Vec<String>,
+    ) -> Result<String> {
         match options[selection].as_str() {
             "json" => {
+                let schema_path_str = self.databases[db_index].disk_mappings[selection]
+                    .path
+                    .clone();
                 let mut translator = JsonTranslator {
-                    path: &self.databases[db_index].disk_mappings[selection].path,
+                    path: schema_path_str,
                     json: None,
                 };
-                let _ = translator.from_disk();
-                translator.display();
+                translator.load_from_disk()?;
+                let resp_str = translator.get_string();
+                Ok(resp_str)
             }
             "prisma" => {
                 let mut translator = PrismaTranslator {
-                    path: &self.databases[db_index].disk_mappings[selection].path,
-                    prisma_schema: None,
+                    path: self.databases[db_index].disk_mappings[selection]
+                        .path
+                        .clone(),
+                    disk_schema: None,
+                    db_schema: None,
                 };
-                let _ = translator.from_disk();
-                translator.display();
+                translator.load_from_disk()?;
+                Ok(translator.get_string())
             }
-            _ => {
-                println!("no match")
-            }
-        };
-        Ok(())
+            _ => anyhow::bail!("invalid selection"),
+        }
     }
 
-    pub fn main_menu(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        println!("\n\n");
-        let selection = Select::new()
-            .with_prompt("what would you like to do?")
-            .default(0)
-            .items(&[
-                "display databases",
-                "sync databases",
-                "add database",
-                "edit databases",
-                "browse schemas",
-                "write one",
-                "exit",
-            ])
-            .interact()
-            .unwrap();
-        match selection {
-            0 => {
-                self.display();
-                self.main_menu()?;
+    pub fn view_table_from_database(
+        &self,
+        selection: usize,
+        db_index: usize,
+        options: &Vec<String>,
+    ) -> Result<String> {
+        match options[selection].as_str() {
+            "json" => {
+                let mut translator = JsonTranslator {
+                    path: self.databases[db_index].disk_mappings[selection]
+                        .path
+                        .clone(),
+                    json: None,
+                };
+                translator.load_from_database(&self.databases[db_index].get_descriptions());
+                Ok(translator.get_string())
             }
-            1 => {
-                self.sync();
-                self.main_menu()?;
+            "prisma" => {
+                let mut translator = PrismaTranslator {
+                    path: self.databases[db_index].disk_mappings[selection]
+                        .path
+                        .clone(),
+                    disk_schema: None,
+                    db_schema: None,
+                };
+                translator.load_from_database(&self.databases[db_index].get_descriptions());
+                println!("{}", translator.get_string());
+                panic!();
+                Ok(translator.get_string())
             }
-            2 => {
-                self.create_database_entry()?;
-                self.main_menu()?;
-            }
-            3 => {
-                self.edit_databases()?;
-                self.main_menu()?;
-            }
-            4 => {
-                self.select_schema_to_view()?;
-                self.main_menu()?;
-            }
-            5 => {
-                self.select_schema_to_write()?;
-                self.main_menu()?;
-            }
-            6 => {}
             _ => {
-                println!("Invalid selection");
-                self.main_menu()?;
+                anyhow::bail!("invalid selection")
             }
         }
-        Ok(())
+    }
+
+    pub fn write_one_schema_from_database(
+        &self,
+        selection: usize,
+        db_index: usize,
+        options: &Vec<String>,
+    ) -> Result<()> {
+        let descriptions = self.databases[db_index].get_descriptions();
+        match options[selection].as_str() {
+            "json" => {
+                self.databases[db_index].sync_one(
+                    AcceptedFormat::Json,
+                    self.databases[db_index].disk_mappings[selection]
+                        .path
+                        .clone(),
+                    &descriptions,
+                );
+                Ok(())
+            }
+            "prisma" => {
+                self.databases[db_index].sync_one(
+                    AcceptedFormat::Prisma,
+                    self.databases[db_index].disk_mappings[selection]
+                        .path
+                        .clone(),
+                    &descriptions,
+                );
+                Ok(())
+            }
+            _ => {
+                anyhow::bail!("invalid selection")
+            }
+        }
     }
 }

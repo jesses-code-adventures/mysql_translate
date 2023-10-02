@@ -1,7 +1,7 @@
 use mysql::prelude::*;
 use mysql::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Description {
     pub field: String,
     pub type_: String,
