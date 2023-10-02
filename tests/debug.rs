@@ -1,18 +1,13 @@
 use mysql_translate::{
     session::Session,
-    set_env_variables,
-    structure::{AcceptedFormat, DiskMapping, TranslatorBehaviour},
+    structure::{get_session_data_location, AcceptedFormat, DiskMapping, TranslatorBehaviour},
     translators::{json_translator::JsonTranslator, prisma_translator::PrismaTranslator},
 };
-use std::env;
 
 #[test]
 pub fn prisma_db_pull() {
-    set_env_variables::set_vars();
-    let mut data_location =
-        env::var("STORAGE").expect("storage directory to exist as an environment variable");
-    data_location.push_str("/session.json");
-    let session = Session::new(&data_location.to_string()).expect("session to load");
+    let session_data_location = get_session_data_location();
+    let session = Session::new(&session_data_location.to_string()).expect("session to load");
     let mut prisma_disk_mappings: Vec<&DiskMapping> = session.databases[0]
         .disk_mappings
         .iter()
@@ -33,11 +28,8 @@ pub fn prisma_db_pull() {
 
 #[test]
 pub fn json_db_pull() {
-    set_env_variables::set_vars();
-    let mut data_location =
-        env::var("STORAGE").expect("storage directory to exist as an environment variable");
-    data_location.push_str("/session.json");
-    let session = Session::new(&data_location.to_string()).expect("session to load");
+    let session_data_location = get_session_data_location();
+    let session = Session::new(&session_data_location.to_string()).expect("session to load");
     let mut prisma_disk_mappings: Vec<&DiskMapping> = session.databases[0]
         .disk_mappings
         .iter()

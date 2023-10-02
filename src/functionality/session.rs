@@ -1,5 +1,5 @@
-use crate::database;
-use crate::structure::{AcceptedFormat, DiskMapping, TranslatorBehaviour};
+use crate::functionality::database;
+use crate::functionality::structure::{AcceptedFormat, DiskMapping, TranslatorBehaviour};
 use crate::translators::json_translator::JsonTranslator;
 use crate::translators::prisma_translator::PrismaTranslator;
 use anyhow::Result;
@@ -182,8 +182,6 @@ impl Session {
                     db_schema: None,
                 };
                 translator.load_from_database(&self.databases[db_index].get_descriptions());
-                println!("{}", translator.get_string());
-                panic!();
                 Ok(translator.get_string())
             }
             _ => {

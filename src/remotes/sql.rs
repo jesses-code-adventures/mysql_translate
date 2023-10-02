@@ -81,7 +81,7 @@ pub fn get_table_descriptions(url: &str) -> Result<Vec<Table>> {
             conn.query(format!("DESCRIBE {}", table))
                 .unwrap_or_else(|e| {
                     errors.push(ErrorReport {
-                        table: table.clone(),
+                        table: table.to_owned(),
                         error: e,
                     });
                     vec![]

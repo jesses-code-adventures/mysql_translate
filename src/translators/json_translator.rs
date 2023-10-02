@@ -1,5 +1,5 @@
-use crate::sql::{Description, Table};
-use crate::structure::TranslatorBehaviour;
+use crate::functionality::structure::TranslatorBehaviour;
+use crate::remotes::sql::{Description, Table};
 use anyhow::Result;
 use serde_json::json;
 use std::collections::HashMap;
@@ -88,7 +88,7 @@ impl JsonTranslator {
 
     /// Write json to a path.
     fn dump_json(&self, the_json: &serde_json::Value) -> Result<(), std::io::Error> {
-        let file = File::create(self.path.clone())?;
+        let file = File::create(&self.path)?;
         let buf_writer = BufWriter::new(file);
         match serde_json::ser::to_writer_pretty(buf_writer, &the_json) {
             Ok(_) => Ok(()),

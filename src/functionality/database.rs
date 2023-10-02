@@ -1,5 +1,5 @@
-use crate::sql;
-use crate::structure::{AcceptedFormat, DiskMapping, TranslatorBehaviour};
+use crate::functionality::structure::{AcceptedFormat, DiskMapping, TranslatorBehaviour};
+use crate::remotes::sql;
 use crate::translators::json_translator::JsonTranslator;
 use crate::translators::prisma_translator::PrismaTranslator;
 use dialoguer::Select;

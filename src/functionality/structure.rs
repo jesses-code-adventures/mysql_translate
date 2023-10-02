@@ -1,10 +1,24 @@
-use crate::session::Session;
-use crate::sql::Table;
+use crate::functionality::session::Session;
+use crate::remotes::sql::Table;
 use anyhow::Result;
 use core::fmt::{self, Display};
+use dotenvy::dotenv;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::cell::RefCell;
+use std::env;
+
+pub fn set_vars() {
+    dotenv().expect(".env not found");
+}
+
+pub fn get_session_data_location() -> String {
+    set_vars();
+    let mut data_location =
+        env::var("STORAGE").expect("storage directory to exist as an environment variable");
+    data_location.push_str("/session.json");
+    data_location
+}
 
 /// A trait for translating between a database of Vec<Table> and the
 /// format implemented by the child struct.

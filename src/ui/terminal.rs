@@ -2,9 +2,11 @@ use anyhow::Result;
 use dialoguer::Select;
 use std::cell::RefCell;
 
-use crate::database;
-use crate::session::Session;
-use crate::structure::{AcceptedFormat, UI};
+use crate::functionality::{
+    database,
+    session::Session,
+    structure::{AcceptedFormat, UI},
+};
 
 static MAIN_MENU_ITEMS: [&str; 8] = [
     "display databases",
