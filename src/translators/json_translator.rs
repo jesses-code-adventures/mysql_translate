@@ -18,10 +18,8 @@ impl TranslatorBehaviour<serde_json::Value> for JsonTranslator {
     fn get_translation(&self, database: &Vec<Table>) -> serde_json::Value {
         let mut result = HashMap::new();
         for database in database {
-            result.insert(
-                &database.name,
-                json!(self.format_database(&database.description)),
-            );
+            let this_result = json!(self.format_database(&database.description));
+            result.insert(&database.name, this_result);
         }
         let mut tables = HashMap::new();
         tables.insert("tables", result);
@@ -64,15 +62,18 @@ impl TranslatorBehaviour<serde_json::Value> for JsonTranslator {
 
 /// Private implementation behaviours for JsonTranslator
 impl JsonTranslator {
-    /// Formats one database table description.
-    fn format_table(&self, database: &Description) -> String {
+    /// Formats one field description.
+    fn format_table(&self, field: &Description) -> String {
         let mut result = String::new();
-        result.push_str(&database.type_);
-        if database.key.len() > 0 {
-            result.push_str(&format!(" {}", database.key));
+        result.push_str(&field.type_);
+        if field.key.len() > 0 {
+            result.push_str(&format!(" {}", field.key));
         }
-        if database.null == "NO" {
+        if field.null == "NO" {
             result.push_str(" NOT NULL");
+        }
+        if field.extra.contains("auto_increment") {
+            result.push_str(" AUTO_INCREMENT");
         }
         result
     }
@@ -80,8 +81,9 @@ impl JsonTranslator {
     /// Coalesces the description of a database's tables into a hashmap.
     fn format_database(&self, database: &Vec<Description>) -> HashMap<String, String> {
         let mut result = HashMap::new();
-        for database in database {
-            result.insert(String::from(&database.field), self.format_table(database));
+        println!("{:?}", database);
+        for db in database {
+            result.insert(String::from(&db.field), self.format_table(db));
         }
         result
     }
