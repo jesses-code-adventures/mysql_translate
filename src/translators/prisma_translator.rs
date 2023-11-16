@@ -54,7 +54,7 @@ impl TranslatorBehaviour<PrismaSchema> for PrismaTranslator {
             resp.push_str("\n\n");
         }
         if self.db_schema.is_some() {
-            resp.push_str("disk schema:\n\n");
+            resp.push_str("db schema:\n\n");
             resp.push_str(&self.db_schema.as_ref().unwrap().as_text());
             resp.push_str("\n\n");
         }
@@ -312,7 +312,15 @@ impl Model {
         text.push_str(&format!("model {} {{\n", self.name));
         for field in &self.fields {
             text.push_str("  ");
-            text.push_str(field.as_text().as_str());
+            text.push_str(
+                field
+                    .as_text(
+                        self.name_column_width,
+                        self.field_type_column_width,
+                        self.get_number_of_id_fields(),
+                    )
+                    .as_str(),
+            );
             text.push_str("\n");
         }
         if self.directives.len() > 0 {
@@ -324,6 +332,16 @@ impl Model {
         }
         text.push_str("}\n");
         text
+    }
+
+    fn get_number_of_id_fields(&self) -> usize {
+        let mut count = 0;
+        for field in &self.fields {
+            if field.is_id {
+                count += 1;
+            }
+        }
+        count
     }
 
     fn parse_from_disk(model_str: &str) -> Option<Model> {
@@ -391,6 +409,24 @@ impl From<&Table> for Model {
         for description in table.description.clone().into_iter() {
             let field = Field::from(description);
             model.add_field(field);
+        }
+        if model.get_number_of_id_fields() > 1 {
+            let number_of_directives = model.directives.len();
+            model.directives.push(String::new());
+            model.directives[number_of_directives].push_str("  @@id(["); // probably cursed to add
+                                                                         // the whitespace like
+                                                                         // this
+            for field in model.fields.iter() {
+                if field.is_id {
+                    model.directives[number_of_directives]
+                        .push_str(format!("{}, ", field.name).as_str());
+                }
+            }
+            model.directives[number_of_directives] = model.directives[number_of_directives]
+                .strip_suffix(", ")
+                .unwrap()
+                .to_string();
+            model.directives[number_of_directives].push_str("])");
         }
         model.name_column_width = model.fields.iter().map(|f| f.name.len()).max().unwrap();
         model.field_type_column_width = model
@@ -885,7 +921,9 @@ impl Field {
         self.name = name;
     }
     fn set_target_name_length(&mut self, length: usize) {
-        self.target_name_width = length;
+        if length > self.target_name_width {
+            self.target_name_width = length;
+        }
     }
     fn set_field_type(&mut self, field_type: String) {
         self.field_type = field_type;
@@ -894,7 +932,9 @@ impl Field {
         self.db_type_annotation = Some(db_type_annotation);
     }
     fn set_field_type_length(&mut self, length: usize) {
-        self.target_field_type_width = length;
+        if length > self.target_field_type_width {
+            self.target_field_type_width = length;
+        }
     }
     fn set_is_required(&mut self, is_required: bool) {
         self.is_required = is_required;
@@ -908,19 +948,26 @@ impl Field {
     // fn set_relation(&mut self, relation: Option<Relation>) {
     //     self.relation = relation;
     // }
-    fn as_text(&self) -> String {
+    fn as_text(
+        &self,
+        max_name_width: usize,
+        max_field_width: usize,
+        number_of_id_fields: usize,
+    ) -> String {
         let mut text = String::new();
         text.push_str(&self.name);
-        let spaces_to_add = self.target_name_width - self.name.len();
+        let spaces_to_add = max_name_width - self.name.len();
         for _ in 0..spaces_to_add {
             text.push_str(" ");
         }
+        text.push_str(" ");
         text.push_str(&self.field_type);
-        let spaces_to_add = self.target_field_type_width - self.field_type.len();
+        let spaces_to_add = max_field_width - self.field_type.len();
         for _ in 0..spaces_to_add {
             text.push_str(" ");
         }
-        if self.is_id {
+        text.push_str(" ");
+        if self.is_id && number_of_id_fields == 1 {
             text.push_str("@id ");
         }
         if self.unique.is_some() {
@@ -931,20 +978,30 @@ impl Field {
             text.push_str("@default(");
             text.push_str(self.default.as_ref().unwrap().as_str());
             text.push_str(") ");
+            text.push_str(" ");
         }
         if self.db_type_annotation.is_some() {
-            text.push_str(self.db_type_annotation.clone().unwrap().as_str());
+            text.push_str("@db.");
+            text.push_str(
+                self.db_type_annotation
+                    .clone()
+                    .unwrap()
+                    .replace(" ", "_")
+                    .as_str(),
+            );
             text.push_str(" ");
         }
         if self.relation.is_some() {
             text.push_str(self.relation.clone().unwrap().as_text().as_str());
+            text.push_str(" ");
         }
         text
     }
     fn get_field_type_from_db_type(&self, db_type: &str) -> String {
         let db_type = db_type.to_lowercase();
         match db_type {
-            _ if db_type.contains("tinyint") => "Boolean".to_string(),
+            _ if db_type.eq("tinyint(1)") => "Boolean".to_string(),
+            _ if db_type.contains("tinyint") => "Int".to_string(),
             _ if db_type.contains("smallint") => "Int".to_string(),
             _ if db_type.contains("mediumint") => "Int".to_string(),
             _ if db_type.contains("int") => "Int".to_string(),
@@ -981,6 +1038,14 @@ impl From<Description> for Field {
         field.default = match description.default {
             Some(ref default) => match default.as_str() {
                 "CURRENT_TIMESTAMP" => Some("now()".to_string()),
+                "1" => match field.field_type.as_str() {
+                    "Boolean" => Some("true".to_string()),
+                    _ => Some(default.clone()),
+                },
+                "0" => match field.field_type.as_str() {
+                    "Boolean" => Some("false".to_string()),
+                    _ => Some(default.clone()),
+                },
                 _ => Some(default.clone()),
             },
             None => None,
