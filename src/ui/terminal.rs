@@ -10,11 +10,11 @@ use crate::{
 static MAIN_MENU_ITEMS: [&str; 8] = [
     "display databases",
     "sync databases",
+    "sync one",
     "add database",
     "edit databases",
     "view tables from disk",
     "view tables from database",
-    "write one",
     "exit",
 ];
 static WELCOME_STRING: &str = "welcome to mysqueal translate~!";
@@ -144,7 +144,7 @@ impl UI for TerminalUI {
         let db_index = self.select_database()?;
         let options = AcceptedFormat::all_as_string_array();
         let selection = Select::new()
-            .with_prompt("which schema would you like to view from the disk?")
+            .with_prompt("which schema would you like to write to the disk?")
             .default(0)
             .items(&options)
             .interact()?;
@@ -224,11 +224,11 @@ impl UI for TerminalUI {
                     self.clear_terminal();
                     self.get_session_mut().sync()
                 }
-                2 => self.create_database_entry()?,
-                3 => self.edit_databases()?,
-                4 => self.view_tables_from_disk()?,
-                5 => self.view_tables_from_database()?,
-                6 => self.select_schema_to_write()?,
+                2 => self.select_schema_to_write()?,
+                3 => self.create_database_entry()?,
+                4 => self.edit_databases()?,
+                5 => self.view_tables_from_disk()?,
+                6 => self.view_tables_from_database()?,
                 7 => {
                     self.goodbye();
                     return Ok(());
