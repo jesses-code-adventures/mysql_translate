@@ -35,7 +35,7 @@ impl TranslatorBehaviour<PrismaSchema> for PrismaTranslator {
         let output_path_buf = output_path_buf.with_file_name("mysql_output_from_db.prisma");
         let output_path = output_path_buf.as_path();
         let schema = PrismaSchema::from(database);
-        let res = fs::write(output_path.clone().to_str().unwrap(), schema.as_text());
+        let res = fs::write(output_path.to_str().unwrap(), schema.as_text());
         if res.is_ok() {
             println!("success");
         } else {
@@ -116,12 +116,6 @@ impl PrismaTranslator {
         }
         Ok(PrismaSchema::build(generator, datasource, models))
     }
-
-    // fn test_db_pull_matches(&self, db_data: Vec<Table>) -> bool {
-    //     let disk_schema = self.parse_from_disk().expect("parse from disk to succeed");
-    //     let db_schema = self.get_translation(&db_data);
-    //     disk_schema == db_schema
-    // }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq)]
@@ -226,12 +220,6 @@ impl Generator {
             provider,
         }
     }
-    // fn set_name(&mut self, name: String) {
-    //     self.name = name;
-    // }
-    // fn set_provider(&mut self, provider: String) {
-    //     self.provider = provider;
-    // }
     fn as_text(&self) -> String {
         format!(
             "generator {0} {{\n  provider = \"{1}\"\n}}",
@@ -253,12 +241,6 @@ impl Datasource {
             provider: String::from("mysql"),
         }
     }
-    // fn set_name(&mut self, name: String) {
-    //     self.name = name;
-    // }
-    // fn set_provider(&mut self, provider: String) {
-    //     self.provider = provider;
-    // }
     fn as_text(&self) -> String {
         format!(
             "datasource {} {{\n  provider = \"{}\"\n  url      = env(\"DATABASE_URL\")\n}}",
@@ -450,7 +432,7 @@ impl PartialEq for Model {
             return false;
         }
         for directive in self.directives.iter() {
-            let other_directive = other.directives.iter().find(|d| d.clone() == directive); // This sucks heavily
+            let other_directive = other.directives.iter().find(|d| d == &directive);
             if other_directive.is_none() {
                 println!("directive {} not found in other {}", directive, self.name);
                 return false;
@@ -463,7 +445,7 @@ impl PartialEq for Model {
                 println!("field {} not found in other", field.name);
                 return false;
             }
-            if field.to_owned() != other_field.unwrap().to_owned() {
+            if field.to_owned() != other_field.expect("other field to exist").to_owned() {
                 println!("field {} not equal to other", field.name);
                 return false;
             }
@@ -496,26 +478,6 @@ struct Relation {
 }
 
 impl Relation {
-    // fn new(
-    //     map: Option<String>,
-    //     fields: Option<Vec<String>>,
-    //     references: Option<Vec<String>>,
-    //     on_update: Option<String>,
-    //     on_delete: Option<String>,
-    // ) -> Relation {
-    //     let relation = Relation {
-    //         map,
-    //         fields,
-    //         references,
-    //         on_update,
-    //         on_delete,
-    //     };
-    //     if relation.map.is_none() || (relation.fields.is_none() && relation.references.is_none()) {
-    //         panic!("insufficient data found to construct relation");
-    //     }
-    //     relation
-    // }
-
     fn as_text(&self) -> String {
         let mut resp = String::new();
         resp.push_str("@relation(");
@@ -981,12 +943,9 @@ impl Field {
             text.push_str(" ");
         }
         if self.db_type_annotation.is_some() {
-            text.push_str("@db.");
             text.push_str(
-                self.db_type_annotation
-                    .clone()
-                    .unwrap()
-                    .replace(" ", "_")
+                self.format_db_annotation()
+                    .expect(self.db_type_annotation.clone().unwrap().as_str())
                     .as_str(),
             );
             text.push_str(" ");
@@ -998,24 +957,112 @@ impl Field {
         text
     }
     fn get_field_type_from_db_type(&self, db_type: &str) -> String {
-        let db_type = db_type.to_lowercase();
+        let db_type = self
+            .db_type_annotation
+            .clone()
+            .unwrap_or("String".to_string());
+        let mut resp = String::new();
         match db_type {
-            _ if db_type.eq("tinyint(1)") => "Boolean".to_string(),
-            _ if db_type.contains("tinyint") => "Int".to_string(),
-            _ if db_type.contains("smallint") => "Int".to_string(),
-            _ if db_type.contains("mediumint") => "Int".to_string(),
-            _ if db_type.contains("int") => "Int".to_string(),
-            _ if db_type.contains("bigint") => "Int".to_string(),
-            _ if db_type.contains("float") => "Float".to_string(),
-            _ if db_type.contains("double") => "Float".to_string(),
-            _ if db_type.contains("decimal") => "Float".to_string(),
-            _ if db_type.contains("date") => "DateTime".to_string(),
-            _ if db_type.contains("time") => "DateTime".to_string(),
-            _ if db_type.contains("timestamp") => "DateTime".to_string(),
-            _ if db_type.contains("year") => "Int".to_string(),
-            _ if db_type.contains("bool") => "Boolean".to_string(),
-            _ => "String".to_string(),
+            _ if db_type.eq("tinyint(1)") => resp.push_str("Boolean"),
+            _ if db_type.contains("tinyint") => resp.push_str("Int"),
+            _ if db_type.contains("smallint") => resp.push_str("Int"),
+            _ if db_type.contains("mediumint") => resp.push_str("Int"),
+            _ if db_type.contains("int") => resp.push_str("Int"),
+            _ if db_type.contains("bigint") => resp.push_str("Int"),
+            _ if db_type.contains("float") => resp.push_str("Float"),
+            _ if db_type.contains("double") => resp.push_str("Float"),
+            _ if db_type.contains("decimal") => resp.push_str("Decimal"),
+            _ if db_type.contains("date") => resp.push_str("DateTime"),
+            _ if db_type.contains("time") => resp.push_str("DateTime"),
+            _ if db_type.contains("timestamp") => resp.push_str("DateTime"),
+            _ if db_type.contains("year") => resp.push_str("Int"),
+            _ if db_type.contains("bool") => resp.push_str("Boolean"),
+            _ if db_type.contains("json") => resp.push_str("Json"),
+            _ => resp.push_str("String"),
         }
+        if !self.is_required {
+            resp.push_str("?");
+        }
+        resp
+    }
+    fn format_db_annotation(&self) -> Option<String> {
+        let mut resp = String::from("@db.");
+        match self
+            .db_type_annotation
+            .clone()
+            .unwrap_or_else(|| "".to_string())
+            .as_str()
+        {
+            db_type if db_type.contains("tinyint") => resp.push_str("TinyInt"),
+            db_type if db_type.contains("smallint") && db_type.contains("unsigned") => resp
+                .push_str(
+                    db_type
+                        .replace("smallint unsigned", "UnsignedSmallInt")
+                        .as_str(),
+                ),
+            db_type if db_type.contains("smallint") => {
+                resp.push_str(db_type.replace("smallint", "SmallInt").as_str())
+            }
+            db_type if db_type.contains("mediumint") && db_type.contains("unsigned") => resp
+                .push_str(
+                    db_type
+                        .replace("mediumint unsigned", "UnsignedMediumInt")
+                        .as_str(),
+                ),
+            db_type if db_type.contains("mediumint") => {
+                resp.push_str(db_type.replace("mediumint", "MediumInt").as_str())
+            }
+            db_type if db_type.contains("bigint") && db_type.contains("unsigned") => resp.push_str(
+                db_type
+                    .replace("bigint unsigned", "UnsignedBigInt")
+                    .as_str(),
+            ),
+            db_type if db_type.contains("bigint") => {
+                resp.push_str(db_type.replace("bigint", "BigInt").as_str())
+            }
+            db_type if db_type.contains("int") && db_type.contains("unsigned") => {
+                resp.push_str(db_type.replace("int unsigned", "UnsignedInt").as_str())
+            }
+            db_type if db_type.contains("int") => {
+                resp.push_str(db_type.replace("int", "Int").as_str())
+            }
+            db_type if db_type.contains("float") => resp.push_str("Float"),
+            db_type if db_type.contains("double") => {
+                resp.push_str(db_type.replace("double", "Double").as_str())
+            }
+            db_type if db_type.contains("decimal") => {
+                resp.push_str(db_type.replace("decimal", "Decimal").as_str())
+            }
+            db_type if db_type.contains("datetime") => {
+                resp.push_str(db_type.replace("datetime", "DateTime").as_str())
+            }
+            db_type if db_type.contains("date") => {
+                resp.push_str(db_type.replace("date", "Date").as_str())
+            }
+            db_type if db_type.contains("time") => {
+                resp.push_str(db_type.replace("time", "Time").as_str())
+            }
+            db_type if db_type.contains("timestamp") => {
+                resp.push_str(db_type.replace("timestamp", "Timestamp").as_str())
+            }
+            db_type if db_type.contains("bool") => {
+                resp.push_str(db_type.replace("boolean", "Boolean").as_str())
+            }
+            db_type if db_type.contains("varchar") => {
+                resp.push_str(db_type.replace("varchar", "VarChar").as_str())
+            }
+            db_type if db_type.contains("mediumtext") => {
+                resp.push_str(db_type.replace("mediumtext", "MediumText").as_str())
+            }
+            db_type if db_type.contains("text") => {
+                resp.push_str(db_type.replace("text", "Text").as_str())
+            }
+            db_type if db_type.contains("json") => {
+                resp.push_str(db_type.replace("json", "Json").as_str())
+            }
+            _ => return None,
+        }
+        Some(resp)
     }
 }
 
@@ -1052,7 +1099,7 @@ impl From<Description> for Field {
         };
         field.set_target_name_length(field.name.len());
         field.set_field_type_length(field.field_type.len());
-        println!("field: {:?}", field);
+        // println!("field: {:?}", field);
         field
     }
 }
