@@ -81,7 +81,7 @@ impl JsonTranslator {
     /// Coalesces the description of a database's tables into a hashmap.
     fn format_database(&self, database: &Vec<Description>) -> HashMap<String, String> {
         let mut result = HashMap::new();
-        println!("{:?}", database);
+        // println!("{:?}", database);
         for db in database {
             result.insert(String::from(&db.field), self.format_table(db));
         }

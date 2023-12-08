@@ -67,7 +67,6 @@ impl From<Vec<ForeignKeyInformation>> for TableKeys {
                 }));
             }
         }
-        println!("Keys: {:?}", keys);
         TableKeys { keys }
     }
 }
