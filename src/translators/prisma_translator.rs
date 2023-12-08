@@ -1060,6 +1060,70 @@ impl Field {
             db_type if db_type.contains("json") => {
                 resp.push_str(db_type.replace("json", "Json").as_str())
             }
+            db_type if db_type.contains("Text") => {
+                resp.push_str(db_type.replace("Text", "Text").as_str())
+            }
+            db_type if db_type.contains("Timestamp") => {
+                resp.push_str(db_type.replace("Timestamp", "Timestamp").as_str())
+            }
+            db_type if db_type.contains("VarChar") => {
+                resp.push_str(db_type.replace("VarChar", "VarChar").as_str())
+            }
+            db_type if db_type.contains("TinyInt") => {
+                resp.push_str(db_type.replace("TinyInt", "TinyInt").as_str())
+            }
+            db_type if db_type.contains("SmallInt") => {
+                resp.push_str(db_type.replace("SmallInt", "SmallInt").as_str())
+            }
+            db_type if db_type.contains("MediumInt") => {
+                resp.push_str(db_type.replace("MediumInt", "MediumInt").as_str())
+            }
+            db_type if db_type.contains("BigInt") => {
+                resp.push_str(db_type.replace("BigInt", "BigInt").as_str())
+            }
+            db_type if db_type.contains("Int") => {
+                resp.push_str(db_type.replace("Int", "Int").as_str())
+            }
+            db_type if db_type.contains("Float") => {
+                resp.push_str(db_type.replace("Float", "Float").as_str())
+            }
+            db_type if db_type.contains("Double") => {
+                resp.push_str(db_type.replace("Double", "Double").as_str())
+            }
+            db_type if db_type.contains("Decimal") => {
+                resp.push_str(db_type.replace("Decimal", "Decimal").as_str())
+            }
+            db_type if db_type.contains("DateTime") => {
+                resp.push_str(db_type.replace("DateTime", "DateTime").as_str())
+            }
+            db_type if db_type.contains("Date") => {
+                resp.push_str(db_type.replace("Date", "Date").as_str())
+            }
+            db_type if db_type.contains("Time") => {
+                resp.push_str(db_type.replace("Time", "Time").as_str())
+            }
+            db_type if db_type.contains("Boolean") => {
+                resp.push_str(db_type.replace("Boolean", "Boolean").as_str())
+            }
+            db_type if db_type.contains("Json") => {
+                resp.push_str(db_type.replace("Json", "Json").as_str())
+            }
+            db_type if db_type.contains("Binary") => {
+                resp.push_str(db_type.replace("Binary", "Binary").as_str())
+            }
+            db_type if db_type.contains("Blob") => {
+                resp.push_str(db_type.replace("Blob", "Blob").as_str())
+            }
+            db_type if db_type.contains("MediumBlob") => {
+                resp.push_str(db_type.replace("MediumBlob", "MediumBlob").as_str())
+            }
+            db_type if db_type.contains("LongBlob") => {
+                resp.push_str(db_type.replace("LongBlob", "LongBlob").as_str())
+            }
+            db_type if db_type.contains("TinyBlob") => {
+                resp.push_str(db_type.replace("TinyBlob", "TinyBlob").as_str())
+            }
+
             _ => return None,
         }
         Some(resp)
