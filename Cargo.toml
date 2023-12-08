@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.71"
+crossterm = "0.27.0"
 dialoguer = "0.10.3"
 dotenvy = "0.15.7"
 mysql = "23.0.1"
