@@ -35,7 +35,7 @@ impl TranslatorBehaviour<serde_json::Value> for JsonTranslator {
     fn load_from_disk(&mut self) -> Result<()> {
         let file = File::open(&self.path)?;
         let val = serde_json::from_reader(file).unwrap_or_else(|_| {
-            println!("couldn't read the file! skipping loading...");
+            eprintln!("couldn't read the file! skipping loading...");
             serde_json::Value::Null
         });
         if !val.is_null() {
@@ -45,13 +45,11 @@ impl TranslatorBehaviour<serde_json::Value> for JsonTranslator {
     }
 
     /// Receive data from the datbase and write straight to disk.
-    fn write_to_disk(&self, database: &Vec<Table>) {
+    fn write_to_disk(&self, database: &Vec<Table>) -> Result<()> {
         println!("writing json to {}", &self.path);
         let the_json = self.get_translation(database);
-        match self.dump_json(&the_json) {
-            Ok(_) => (),
-            Err(e) => println!("error writing json: {}", e),
-        }
+        self.dump_json(&the_json)?;
+        Ok(())
     }
 
     /// A pretty string representation of the translator's json.
@@ -89,12 +87,10 @@ impl JsonTranslator {
     }
 
     /// Write json to a path.
-    fn dump_json(&self, the_json: &serde_json::Value) -> Result<(), std::io::Error> {
+    fn dump_json(&self, the_json: &serde_json::Value) -> Result<()> {
         let file = File::create(&self.path)?;
         let buf_writer = BufWriter::new(file);
-        match serde_json::ser::to_writer_pretty(buf_writer, &the_json) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(Into::into(e)),
-        }
+        serde_json::ser::to_writer_pretty(buf_writer, &the_json)?;
+        Ok(())
     }
 }

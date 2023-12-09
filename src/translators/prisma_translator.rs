@@ -31,18 +31,17 @@ impl TranslatorBehaviour<PrismaSchema> for PrismaTranslator {
         Ok(())
     }
 
-    fn write_to_disk(&self, database: &Vec<Table>) {
+    fn write_to_disk(&self, database: &Vec<Table>) -> Result<()> {
         let mut output_path_buf = PathBuf::new();
         output_path_buf.push(&self.path);
         let output_path_buf = output_path_buf.with_file_name("mysql_output_from_db.prisma");
         let output_path = output_path_buf.as_path();
         let schema = PrismaSchema::from(database);
-        let res = fs::write(output_path.to_str().unwrap(), schema.as_text());
-        if res.is_ok() {
-            println!("success");
-        } else {
-            println!("failed");
-        }
+        fs::write(
+            output_path.to_str().expect("output path to exist"),
+            schema.as_text(),
+        )?;
+        Ok(())
     }
 
     fn get_string(&self) -> String {
@@ -66,7 +65,7 @@ impl TranslatorBehaviour<PrismaSchema> for PrismaTranslator {
 
 impl PrismaTranslator {
     pub fn parse_from_disk(&self) -> Result<PrismaSchema> {
-        let file = File::open(self.path.clone()).unwrap();
+        let file = File::open(self.path.clone())?;
         let mut generator_str = String::new();
         let mut data_source_str = String::new();
         let mut models_str = String::new();

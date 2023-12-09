@@ -38,7 +38,7 @@ impl Field {
         if field_str.starts_with("@@") || field_str.starts_with("@relation") {
             panic!("uncaught directive {}", field_str);
         }
-        let mut field_str_mut = field_str.clone().to_string();
+        let mut field_str_mut = field_str.to_string();
         let mut name = String::new();
         let mut field_type = String::new();
         let mut db_type_annotation: Option<String> = None;
@@ -247,7 +247,7 @@ impl Field {
         }
         text
     }
-    fn get_field_type_from_db_type(&self, db_type: &str) -> String {
+    fn get_field_type_from_db_type(&self) -> String {
         let db_type = self
             .db_type_annotation
             .clone()
@@ -424,7 +424,6 @@ impl Field {
 
 impl From<Description> for Field {
     fn from(description: Description) -> Self {
-        println!("description: {:?}", description);
         let mut field = Field::new();
         field.set_name(description.field);
         field.set_is_id(description.key.contains("PRI"));
@@ -436,7 +435,7 @@ impl From<Description> for Field {
                 false => None,
             },
         });
-        field.set_field_type(field.get_field_type_from_db_type(description.type_.as_str()));
+        field.set_field_type(field.get_field_type_from_db_type());
         field.set_db_type_annotation(description.type_.clone());
         field.default = match description.default {
             Some(ref default) => match default.as_str() {
@@ -469,10 +468,6 @@ impl PartialEq for Field {
             && self.default == other.default
             && self.db_type_annotation == other.db_type_annotation
             && self.relation == other.relation;
-        if !resp {
-            println!("self: {:?}", self);
-            println!("other: {:?}", other);
-        }
         resp
     }
 }

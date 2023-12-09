@@ -3,11 +3,8 @@ use anyhow::Result;
 use core::cell::RefCell;
 
 pub trait UI {
+    /// Create a new instance of the UI
     fn new(session: RefCell<Session>) -> Self;
-
-    fn get_session(&self) -> std::cell::Ref<Session>;
-
-    fn get_session_mut(&self) -> std::cell::RefMut<Session>;
 
     /// Returns the index of the selected database in self.databases
     fn select_database(&self) -> Result<usize>;
@@ -29,6 +26,18 @@ pub trait UI {
 
     /// Choose a database to edit the settings (name, url) for
     fn edit_databases(&mut self) -> Result<()>;
+
+    /// Edit the disk mappings for a chosen database
+    fn edit_disk_mappings(&mut self, database_index: usize) -> Result<()>;
+
+    /// Edit the database url, name or disk mappings
+    fn edit_database(&mut self, database_index: usize) -> Result<()>;
+
+    /// Display a certain database
+    fn display_database(&self, database_index: usize);
+
+    /// Display the whole session - sorts the session in place also
+    fn display_session(&self);
 
     /// Main entry point which should allow the user to access:
     /// self.select_database, self.create_database_entry, self.view_tables_from_disk,

@@ -1,3 +1,4 @@
+use crate::flags::flag_parser::CommandLineFlags;
 use crate::functionality::{
     database,
     structure::{AcceptedFormat, DiskMapping},
@@ -16,6 +17,7 @@ use std::path::Path;
 pub struct Session {
     pub databases: Vec<database::Database>,
     pub _data_location: String,
+    pub command_line_flags: Option<CommandLineFlags>,
 }
 
 impl Session {
@@ -25,6 +27,7 @@ impl Session {
         let mut s = Session {
             databases: Vec::new(),
             _data_location: full_path.to_string(),
+            command_line_flags: None,
         };
         s.load().ok()?;
         if s.databases.len() == 0 {
@@ -38,7 +41,12 @@ impl Session {
         Some(Session {
             databases: Vec::new(),
             _data_location: full_path.to_string(),
+            command_line_flags: None,
         })
+    }
+
+    pub fn set_command_line_flags(&mut self, command_line_flags: CommandLineFlags) {
+        self.command_line_flags = Some(command_line_flags);
     }
 
     /// Load an existing session from the disk.
@@ -73,21 +81,15 @@ impl Session {
             return Ok(());
         }
         self.databases.push(database);
-        self.save()?;
+        self.save_database_info()?;
         Ok(())
     }
 
-    pub fn display(&mut self) {
-        self.sort();
+    pub fn sync(&self) -> Result<()> {
         for database in &self.databases {
-            database.display();
+            database.sync()?;
         }
-    }
-
-    pub fn sync(&self) {
-        for database in &self.databases {
-            database.sync();
-        }
+        Ok(())
     }
 
     fn find_existing_database_index(&self, db_url: &str) -> Option<usize> {
@@ -101,19 +103,13 @@ impl Session {
         None
     }
 
-    // fn remove_database(&mut self, index: usize) -> Result<()> {
-    //     self.databases.remove(index);
-    //     self.save()?;
-    //     Ok(())
-    // }
-
-    fn sort(&mut self) {
+    pub fn sort(&mut self) {
         self.databases.sort_by(|a, b| a.name.cmp(&b.name));
     }
 
     /// Write the session's databases to the disk.
     /// This does not write the schemas themselves, instead it saves the database names and urls.
-    pub fn save(&self) -> Result<(), serde_json::Error> {
+    pub fn save_database_info(&self) -> Result<(), serde_json::Error> {
         let path = Path::new(self._data_location.as_str());
         let file = File::create(&path).unwrap();
         let buf_writer = BufWriter::new(file);
@@ -126,7 +122,7 @@ impl Session {
         Ok(())
     }
 
-    pub fn view_table_from_disk(
+    pub fn get_current_local_database(
         &self,
         selection: usize,
         db_index: usize,
@@ -209,7 +205,7 @@ impl Session {
                         .path
                         .clone(),
                     &descriptions,
-                );
+                )?;
                 Ok(())
             }
             "prisma" => {
@@ -219,7 +215,7 @@ impl Session {
                         .path
                         .clone(),
                     &descriptions,
-                );
+                )?;
                 Ok(())
             }
             _ => {

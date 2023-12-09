@@ -19,6 +19,7 @@ pub struct IndexKey {
 }
 
 impl IndexKey {
+    #[allow(dead_code)]
     fn to_prisma_directive(&self) -> String {
         format!(
             "@index([{}]), map: {}",
@@ -71,6 +72,7 @@ impl From<Vec<ForeignKeyInformation>> for TableKeys {
     }
 }
 
+#[allow(dead_code)]
 fn group_multiindex_constraints(data: &Vec<ForeignKeyInformation>) -> HashMap<String, Vec<String>> {
     data.iter()
         .filter_map(|info| {
@@ -119,6 +121,7 @@ type ForeignKeySQLResponse = (
 );
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct ForeignKeyInformation {
     constraint_name: Option<String>,
     constraint_type: Option<String>,

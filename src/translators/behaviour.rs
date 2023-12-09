@@ -5,7 +5,7 @@ use anyhow::Result;
 /// format implemented by the child struct.
 pub trait TranslatorBehaviour<T> {
     /// Writes the database output straight to the disk in the desired format.
-    fn write_to_disk(&self, descriptions: &Vec<Table>);
+    fn write_to_disk(&self, descriptions: &Vec<Table>) -> Result<()>;
     /// Gets type T from a Vec of Table.
     fn get_translation(&self, descriptions: &Vec<Table>) -> T;
     /// Reads the database descriptions from the database in the desired format.

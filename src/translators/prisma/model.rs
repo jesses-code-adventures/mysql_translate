@@ -1,6 +1,7 @@
 use crate::remotes::sql::Table;
 use crate::translators::prisma::field::Field;
 use serde::{Deserialize, Serialize};
+// use std::process::exit;
 
 #[derive(Deserialize, Serialize, Debug, Clone, Eq)]
 pub struct Model {

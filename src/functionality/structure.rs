@@ -53,14 +53,14 @@ pub enum AcceptedFormat {
 }
 
 impl AcceptedFormat {
-    pub fn from_string(format: &str) -> AcceptedFormat {
+    pub fn from_string(format: &str) -> Option<AcceptedFormat> {
         match format {
-            "json" => AcceptedFormat::Json,
-            "prisma" => AcceptedFormat::Prisma,
-            _ => panic!("Invalid format"),
+            "json" => Some(AcceptedFormat::Json),
+            "prisma" => Some(AcceptedFormat::Prisma),
+            _ => None,
         }
     }
-    pub fn as_string(&self) -> &str {
+    pub fn as_string(&self) -> &'static str {
         match self {
             Self::Json => "json",
             Self::Prisma => "prisma",
@@ -70,10 +70,16 @@ impl AcceptedFormat {
         vec![AcceptedFormat::Json, AcceptedFormat::Prisma]
     }
     pub fn all_as_string_array() -> Vec<String> {
-        vec![
-            AcceptedFormat::Json.as_string().to_string(),
-            AcceptedFormat::Prisma.as_string().to_string(),
-        ]
+        AcceptedFormat::all_as_array()
+            .into_iter()
+            .map(|format| format.as_string().to_string())
+            .collect()
+    }
+    pub fn all_as_str_array() -> Vec<&'static str> {
+        AcceptedFormat::all_as_array()
+            .into_iter()
+            .map(|format| format.as_string())
+            .collect()
     }
 }
 

@@ -31,7 +31,7 @@ impl PartialEq for UniqueFlag {
 
 impl From<&str> for UniqueFlag {
     fn from(string: &str) -> Self {
-        let mut new_string = string.clone();
+        let mut new_string = string;
 
         if new_string.starts_with("@") {
             new_string = new_string
